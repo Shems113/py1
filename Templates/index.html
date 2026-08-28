@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Gestion Média</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+
+        .category {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+            .category h2 {
+                margin-top: 0;
+                font-size: 1.2rem;
+                color: #2c3e50;
+                border-bottom: 2px solid #eef2f5;
+                padding-bottom: 10px;
+            }
+
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            display: block;
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            text-align: center;
+            transition: background-color 0.2s;
+        }
+
+            .btn:hover {
+                background-color: #0056b3;
+            }
+
+        .btn-accent {
+            background-color: #17a2b8;
+        }
+
+            .btn-accent:hover {
+                background-color: #117a8b;
+            }
+    </style>
+</head>
+<body>
+    <h1>Dashboard Gestion Média</h1>
+
+    <div class="category">
+        <h2>TMDB (Films &amp; Séries)</h2>
+        <div class="links-grid">
+            <a class="btn" href="{{ url_for('get_tmdb_token_request') }}">Get TMDB Request Token</a>
+            <a class="btn" href="{{ url_for('route_search_tmdb_movies') }}">Search TMDB Movies</a>
+            <a class="btn" href="{{ url_for('route_get_tmdb_movies_alternative_titles') }}">Get TMDB Movies Alternative Titles</a>
+            <a class="btn" href="{{ url_for('route_search_tmdb_tv_episodes') }}">Search TMDB TV Shows Episodes</a>
+        </div>
+    </div>
+
+    <div class="category">
+        <h2>Torrents</h2>
+        <div class="links-grid">
+            <a class="btn btn-accent" href="{{ url_for('route_search_films_torrents') }}">Search Films Torrents</a>
+        </div>
+    </div>
+
+    <div class="category">
+        <h2>Bitport</h2>
+        <div class="links-grid">
+            <a class="btn" href="{{ bitport_auth_url }}">Connect to Bitport</a>
+            <a class="btn" href="{{ url_for('create_film_folders_in_bitport') }}">Create Film Folders</a>
+            <a class="btn" href="{{ url_for('discover_bitport_cloud_folders') }}">Discover Cloud Folders</a>
+            <a class="btn" href="{{ url_for('discover_bitport_cloud_videos') }}">Discover Cloud Videos</a>
+            <a class="btn" href="{{ url_for('transfer_torrents_to_bitport') }}">Transfer Torrents to Cloud</a>
+        </div>
+    </div>
+
+    <div class="category">
+        <h2>Sous-titres (OpenSubtitles)</h2>
+        <div class="links-grid">
+            <a class="btn btn-accent" href="{{ url_for('route_get_films_subtitles') }}">Get Films Subtitles</a>
+            <a class="btn btn-accent" href="{{ url_for('route_download_films_subtitles') }}">Download Films Subtitles</a>
+        </div>
+    </div>
+</body>
+</html>

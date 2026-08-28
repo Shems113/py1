@@ -1,0 +1,65 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{f361b985-6cb5-4376-83ea-e7a2e7b53dee}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>Compile.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId>Global|VisualStudio|global-env</InterpreterId>
+    <SuppressPackageInstallationPrompt>True</SuppressPackageInstallationPrompt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Compile.py" />
+    <Compile Include="MediaService\CBitport.py" />
+    <Compile Include="MediaService\COpenSubtitles.py" />
+    <Compile Include="MediaService\CTmdb.py" />
+    <Compile Include="Common\Helper.py" />
+    <Compile Include="Media\CFile.py" />
+    <Compile Include="Media\CGmail.py" />
+    <Compile Include="Media\CMusic.py" />
+    <Compile Include="Media\CVideo.py" />
+    <Compile Include="Media\CWord.py" />
+    <Compile Include="Common\EEnums.py" />
+    <Compile Include="Media\CMedia.py" />
+    <Compile Include="Common\CLogger.py" />
+    <Compile Include="Common\CUtils.py" />
+    <Compile Include="Main.py" />
+    <Compile Include="CVideoApp.py" />
+    <Compile Include="Torrent\CScraperLimeTorrents.py" />
+    <Compile Include="Torrent\CScraperThePirateBay.py" />
+    <Compile Include="Torrent\CCommonTorrent.py" />
+    <Compile Include="Torrent\CScraperTorznab.py" />
+    <Compile Include="Torrent\CTorrentManager.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Files\" />
+    <Folder Include="Media\" />
+    <Folder Include="Common\" />
+    <Folder Include="MediaService\" />
+    <Folder Include="Torrent\" />
+    <Folder Include="Templates\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Files\cmd.ps1" />
+    <Content Include="Files\GmailApiSettings.json" />
+    <Content Include="Files\Settings.json" />
+    <Content Include="requirements.txt" />
+    <Content Include="Templates\index.html" />
+    <Content Include="Torrent\CScraperYts.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <InterpreterReference Include="Global|VisualStudio|global-env" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>

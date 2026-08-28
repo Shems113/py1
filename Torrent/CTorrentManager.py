@@ -1,0 +1,157 @@
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
+import pandas as pd
+
+from Common.CUtils import data_frame_from_csv, data_frame_to_csv
+from Common.EEnums import ETorrentSource as TorrentSource
+from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
+from Torrent.CScraperLimeTorrents import CScraperLimeTorrents
+from Torrent.CScraperThePirateBay import CScraperThePirateBay
+from Torrent.CScraperTorznab import CScraperTorznab
+from Torrent.CScraperYts import CScraperYts
+
+logger = logging.getLogger(__name__)
+
+
+class CTorrentManager:
+    def __init__(self):
+        # Enregistrement dynamique de l'ensemble des scrapers
+        self.scrapers: Dict[TorrentSource, CCommonTorrent] = {
+            TorrentSource.YTS: CScraperYts(),
+            TorrentSource.LIMETORRENTS: CScraperLimeTorrents(),
+            TorrentSource.THEPIRATEBAY: CScraperThePirateBay(),
+            TorrentSource.TORZNAB: CScraperTorznab(),
+        }
+
+    def check_sources_health(self, timeout: int = 6) -> Dict[str, Dict[str, object]]:
+        """Contrôle l'état de santé de l'ensemble des sources enregistrées."""
+        results = {}
+        with ThreadPoolExecutor(max_workers=len(self.scrapers)) as executor:
+            future_to_source = {
+                executor.submit(scraper.check_health, timeout): source
+                for source, scraper in self.scrapers.items()
+            }
+            for future in as_completed(future_to_source):
+                source = future_to_source[future]
+                try:
+                    res = future.result()
+                    results[source.value] = res
+                    print(f"[{source.value}] {res['healthy']}/{res['total']} miroir(s)/endpoint(s) accessible(s)")
+                except Exception as e:
+                    logger.error(f"Erreur lors du health check de {source.value}: {e}")
+        return results
+
+    def search_torrents(
+        self,
+        query: str,
+        sources: Union[TorrentSource, List[TorrentSource]] = TorrentSource.ALL,
+        export_csv: bool = False,
+        csv_path: Optional[Union[str, Path]] = None,
+        max_workers: int = 5,
+    ) -> pd.DataFrame:
+        """Lance une recherche parallélisée sur les sources sélectionnées."""
+        if isinstance(sources, TorrentSource):
+            selected = list(self.scrapers.keys()) if sources == TorrentSource.ALL else [sources]
+        else:
+            selected = [s for s in sources if s != TorrentSource.ALL]
+
+        all_results: List[TorrentResult] = []
+
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(selected) or 1)) as executor:
+            future_to_src = {
+                executor.submit(self.scrapers[src].search, query): src
+                for src in selected
+                if src in self.scrapers
+            }
+
+            for future in as_completed(future_to_src):
+                src = future_to_src[future]
+                try:
+                    results = future.result()
+                    all_results.extend(results)
+                    print(f"[{src.value}] Résultats récupérés : {len(results)}")
+                except Exception as e:
+                    logger.error(f"Erreur sur {src.value}: {e}")
+
+        if not all_results:
+            return pd.DataFrame()
+
+        df = pd.DataFrame([asdict(r) for r in all_results]).reset_index(drop=True)
+
+        if export_csv and csv_path:
+            data_frame_to_csv(df, csv_path, ";")
+            print(f"Export CSV réalisé : {csv_path} ({len(df)} entrées)")
+
+        return df
+
+    def search_film_torrent(self, name: str, year: Optional[Union[int, str]] = None) -> pd.DataFrame:
+        """Formate la requête puis recherche sur l'ensemble des sources."""
+        str_year = str(year).strip() if year is not None and str(year).strip().isdigit() else ""
+        query = f"{name.strip()} {str_year}".strip()
+        try:
+            print(f"Search torrents with query: {query}")
+            return self.search_torrents(query, TorrentSource.ALL , export_csv=False)
+        except Exception as e:
+            logger.error(f"Error {e} for {query}")
+            return pd.DataFrame([{"error": str(e)}])
+
+    def search_film_torrents(self, tmdb_id: int, name: str, year: Optional[Union[int, str]] = None) -> pd.DataFrame:
+        """Tente une recherche avec l'année puis retente sans l'année en cas d'échec."""
+        for y in [year, None]:
+            df = self.search_film_torrent(name, y)
+            if not df.empty and "error" not in df.columns:
+                df.insert(0, "tmdb_id", tmdb_id)
+                return df
+        return pd.DataFrame()
+
+    def route_search_films_torrents(
+        self, input_file: Union[str, Path], output_file: Union[str, Path], max_workers: int = 4
+    ) -> bool:
+        """Traite une liste de films issue d'un fichier CSV en parallèle."""
+        df_input = data_frame_from_csv(input_file, ";")
+        if df_input.empty:
+            return False
+
+        results = []
+
+        def process_row(row):
+            return self.search_film_torrents(
+                row.get("tmdb_id", 0), row.get("name", ""), row.get("year", None)
+            )
+
+        rows = [row for _, row in df_input.iterrows()]
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_row, row) for row in rows]
+            for future in as_completed(futures):
+                try:
+                    res_df = future.result()
+                    if not res_df.empty:
+                        results.append(res_df)
+                except Exception as e:
+                    logger.error(f"Erreur lors du traitement d'un film: {e}")
+
+        if results:
+            final_df = pd.concat(results, ignore_index=True)
+            final_df = final_df.sort_values(by=["tmdb_id", "seeds"], ascending=[True, False])
+            data_frame_to_csv(final_df, output_file, ";")
+            return True
+        return False
+
+
+if __name__ == "__main__":
+    manager = CTorrentManager()
+
+    # Test de santé des sources
+    manager.check_sources_health()
+
+    # Test de recherche globale sur toutes les sources
+    manager.search_torrents(
+        "Star Wars 1977",
+        sources=TorrentSource.ALL,
+        csv_path="torrentResult.csv",
+        export_csv=True,
+    )

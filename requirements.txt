@@ -1,0 +1,16 @@
+beautifulsoup4
+charset-normalizer
+curl-cffi
+ffmpeg-python
+flask
+google-api-python-client
+google-auth
+google-auth-oauthlib
+loguru
+mutagen
+numpy
+opensubtitlescom
+pandas
+pywin32
+regex
+requests

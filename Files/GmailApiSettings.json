@@ -1,0 +1,28 @@
+{
+  "credentials": {
+    "installed": {
+      "client_id": "270253218228-2l7bq4mm744gu1h111ketncphnci16j3.apps.googleusercontent.com",
+      "project_id": "turnkey-charter-418821",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_secret": "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",
+      "redirect_uris": [
+        "http://localhost"
+      ]
+    }
+  },
+  "token": {
+    "token": "ya29.a0Aa7MYiql2JpKBtxpZPWyJ_uOJr-bO77eEBZcK3Wv9wnY_z_vuaa3XHSPnCuvw24dhrXMwnvvpDTeo4gPnxVI4U7FzEkDHsMYGSjSU_fQaEQ9N8IOuP61LEIbBdZtIWzYPMMpAWSVfOZQHLPVMjn4LamSdR1IktU4GM1m1Om7YRC5IPSlY4heRoq80OvaP4mSe_plnkz8aCgYKAc0SARcSFQHGX2Mi0Gl-HZQ-au8dqqCMryQ6yA0207",
+    "refresh_token": "1//01RWj-mDpO-oKCgYIARAAGAESNwF-L9Irp730gFfSlvf3CfeAYEiHW-ToWwcVaelb0GRAcneVUo-n4yBFaVtAfK0HK4THgtNs-jA",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "client_id": "270253218228-2l7bq4mm744gu1h111ketncphnci16j3.apps.googleusercontent.com",
+    "client_secret": "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",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.readonly"
+    ],
+    "universe_domain": "googleapis.com",
+    "account": "",
+    "expiry": "2026-03-25T19:58:52.534159Z"
+  }
+}
