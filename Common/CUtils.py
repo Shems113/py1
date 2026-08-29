@@ -11,7 +11,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-
+from functools import cache
 import charset_normalizer
 from ffmpeg._probe import probe as ffmpeg_probe
 from mutagen.aac import AAC
@@ -52,7 +52,7 @@ _DECIMAL_SEPARATOR: Optional[str] = None
 
 # --- FFMPEG & System Utilities ---
 
-
+@cache
 def get_ffmpeg_version() -> str:
     """Retourne la première ligne de version de FFmpeg."""
     try:
@@ -67,7 +67,7 @@ def get_ffmpeg_version() -> str:
     except Exception:
         return "ffmpeg introuvable dans le PATH"
 
-
+@cache
 def ensure_ffmpeg_available(verbose: bool = True) -> Optional[str]:
     """Vérifie la présence de ffmpeg."""
     global _FFMPEG_CHECKED

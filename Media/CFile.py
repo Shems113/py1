@@ -37,38 +37,28 @@ class CFile(CMedia):
 
         other_source_dir = self.other_source_path
 
-        for key, df in self._build_dataframes().items():
-            csv_path = other_source_dir / f"{key}.csv"
+        for codec_type, df in self._build_dataframes().items():
+            csv_path = other_source_dir / f"{codec_type}Result.csv"
 
             def export_csv() -> None:
                 data_frame_to_csv(
-                    df, csv_path, self.data_separator, self.fields
+                    df, csv_path, self.data_separator, self.fieldsByCodec.get(codec_type)
                 )
 
-            self.logger.logElapsedTime(export_csv, f"Display {key}")
+            self.logger.logElapsedTime(export_csv, f"Display {codec_type}")
 
     def _build_dataframes(self) -> Dict[str, pd.DataFrame]:
         """Extrait les attributs des fichiers et construit le DataFrame de données."""
-        data: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-        files = self.get_source_files()
-        total = len(files)
-
-        for idx, file_path in enumerate(files, start=1):
-            self.logger.log_file_progress(idx, total, file_path)
-            attributes = self._get_file_attributes_fields(file_path)
-            for codec_type, dicos in attributes.items():
-                data[codec_type].extend(dicos)
+        data = self.process_files_parallel(self._get_file_attributes_fields)
 
         def build_normalized() -> Dict[str, pd.DataFrame]:
             return {
                 codec: pd.json_normalize(dicos) for codec, dicos in data.items()
             }
 
-        results: Dict[str, pd.DataFrame] = self.logger.logElapsedTime(
+        return self.logger.logElapsedTime(
             build_normalized, "Build dataframe with files info"
         )
-
-        return {f"{codec_type}Result": df for codec_type, df in results.items()}
 
     def _get_file_attributes_fields(
         self, file_path: Union[str, Path]
@@ -166,7 +156,7 @@ class CFile(CMedia):
         if rows_to_drop:
             df = df.drop(index=rows_to_drop)
 
-        data_frame_to_csv(df, self.source_path, self.data_separator, self.fields)
+        data_frame_to_csv(df, self.source_path, self.data_separator, self.fieldsByCodec.get("file"))
 
     def _edit_audio_fields(
         self, file_path: Union[str, Path], fields: Dict[str, Any]

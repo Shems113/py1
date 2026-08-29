@@ -36,35 +36,27 @@ class CMusic(CMedia):
 
         other_source = self.other_source_path
 
-        for key, df in self._build_dataframes().items():
-            target_csv = other_source / f"{key}.csv"
+        for codec_type, df in self._build_dataframes().items():
+            target_csv = other_source / f"{codec_type}Result.csv"
 
             def export_csv() -> None:
                 data_frame_to_csv(
-                    df, target_csv, self.data_separator)
+                    df, target_csv, self.data_separator, self.fieldsByCodec.get(codec_type)
+                )
 
-            self.logger.logElapsedTime(export_csv, f"Display {key}")
+            self.logger.logElapsedTime(export_csv, f"Display {codec_type}")
 
         self.remove_empty_folders()
 
     def _build_dataframes(self) -> Dict[str, pd.DataFrame]:
         """Extrait les métadonnées de la musique et construit les DataFrames de données et d'agrégation."""
-        data: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-        files = self.get_source_files()
-        total = len(files)
-
-        # 1. Extraction et stockage des attributs
-        for idx, file_path in enumerate(files, start=1):
-            self.logger.log_file_progress(idx, total, file_path)
-            attributes = self._get_music_attributes_fields(file_path)
-            for codec_type, dicos in attributes.items():
-                data[codec_type].extend(dicos)
+        # 1. Extraction et stockage des attributs en parallèle
+        data = self.process_files_parallel(self._get_music_attributes_fields)
 
         # 2. Normalisation Pandas
         def build_normalized() -> Dict[str, pd.DataFrame]:
             return {
-                codec: pd.json_normalize(dicos)
-                for codec, dicos in data.items()
+                codec: pd.json_normalize(dicos) for codec, dicos in data.items()
             }
 
         raw_results: Dict[str, pd.DataFrame] = self.logger.logElapsedTime(
@@ -106,12 +98,10 @@ class CMusic(CMedia):
         )
 
         # 4. Fusion des dictionnaires de résultats
-        final_dfs = {}
-        for codec_type, df in raw_results.items():
-            final_dfs[f"{codec_type}Result"] = df
+        final_dfs = raw_results
         for codec_type, df in agg_results.items():
-            final_dfs[f"{codec_type}ResultAgg"] = df
-
+            final_dfs[f"{codec_type}Agg"] = df
+            
         return final_dfs
 
     def _get_music_attributes_fields(

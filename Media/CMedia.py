@@ -1,10 +1,11 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional, Union, Callable
 
 import Common.CUtils as Utils
 from Common.CLogger import CLogger as Logger
-
 
 class CMedia:
     def __init__(
@@ -97,3 +98,32 @@ class CMedia:
     def remove_empty_folders(self) -> None:
         """Suppression récursive des dossiers vides dans le répertoire source."""
         Utils.remove_empty_folders(self.source_path)
+
+    def process_files_parallel(
+        self, extract_func: Callable[[str], Dict[str, List[Dict[str, Any]]]]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Exécute l'extraction d'attributs de fichiers en parallèle et accumule les résultats."""
+        data: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        files = self.get_source_files()
+        total = len(files)
+
+        if not files:
+            return data
+
+        def worker(idx: int, file_path: str):
+            self.logger.log_file_progress(idx, total, file_path)
+            return extract_func(file_path)
+
+        # Max_workers peut être ajusté selon tes besoins (ex: max_workers=8)
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [
+                executor.submit(worker, idx, file_path)
+                for idx, file_path in enumerate(files, start=1)
+            ]
+
+            for future in as_completed(futures):
+                attributes = future.result()
+                for codec_type, dicos in attributes.items():
+                    data[codec_type].extend(dicos)
+
+        return data

@@ -48,26 +48,16 @@ class CVideo(CMedia):
 
     def _build_dataframes(self) -> Dict[str, pd.DataFrame]:
         """Extrait les attributs des fichiers vidéo et construit les DataFrames correspondants."""
-        data: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-        files = self.get_source_files()
-        total = len(files)
-
-        for idx, file_path in enumerate(files, start=1):
-            self.logger.log_file_progress(idx, total, file_path)
-            attributes = self._get_video_attributes_fields(file_path)
-            for codec_type, dicos in attributes.items():
-                data[codec_type].extend(dicos)
+        data = self.process_files_parallel(self._get_video_attributes_fields)
 
         def build_normalized() -> Dict[str, pd.DataFrame]:
             return {
                 codec: pd.json_normalize(dicos) for codec, dicos in data.items()
             }
 
-        results: Dict[str, pd.DataFrame] = self.logger.logElapsedTime(
+        return self.logger.logElapsedTime(
             build_normalized, "Build dataframe with video files info"
         )
-
-        return results
 
     def _get_video_attributes_fields(
         self, file_path: Union[str, Path]

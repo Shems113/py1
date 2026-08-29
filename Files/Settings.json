@@ -37,7 +37,8 @@
   {
     "MediaType": "Music",
     "Action": "Read",
-    "RootSourcePath": "D:\\MyDrive\\Source\\Music\\",
+    "RootSourcePaths": "D:\\MyDrive\\Source\\Music\\",
+	"RootSourcePath": "D:\\MyDrive\\Music\\",
     "LogRootSourcePath": "D:\\Result\\Logs\\",
     "ExtraFileRootSourcePath": "D:\\Result\\Music\\",
     "RootTargetPath": "D:\\MyDrive\\Music\\",
@@ -57,7 +58,7 @@
     "MediaType": "Video",
     "Action": "Read",
     "RootSourcePath": "E:\\",
-    "RootSourcePaths": "C:\\Users\\SEDOUD\\Videos\\New\\",
+    "RootSourcePaths": "C:\\Users\\SEDOUD\\Videos\\New\\2026-08-28_22_23_35",
     "LogRootSourcePath": "D:\\Result\\Logs\\",
     "RootTargetPath": "D:\\Result\\Video\\",
     "FilePatterns": [

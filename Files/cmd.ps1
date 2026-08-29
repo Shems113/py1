@@ -1,3 +1,4 @@
+# Encodage de la console en UTF-8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -6,23 +7,28 @@ $Host.UI.RawUI.BackgroundColor = "White"
 $Host.UI.RawUI.ForegroundColor = "DarkGreen"
 Clear-Host
 
+# --- Section Python ---
 # Variables de chemins et paramètres
 $globalEnv  = "D:\Projets\Python\global-env"
-$pyPath     = "D:\Projets\Python\repos\py\Main.py"
-$pyVPath    = "D:\Projets\Python\repos\py\VideoData.py"
-$jsonPath   = "D:\Projets\Python\repos\py\Files\Settings.json"
+$pyExe      = "$globalEnv\Scripts\python.exe"
 
-$mediaType  = "Video"
+$pyPath     = "D:\Projets\Python\repos\py1\Main.py"
+$pyVPath    = "D:\Projets\Python\repos\py1\CVideoApp.py"
+$jsonPath   = "D:\Projets\Python\repos\py1\Files\Settings.json"
+
+$mediaType  = "Music"
 $actionType = "Read"
-# $actionType2 = "Write", "ReadAndMove", "Read"
+$actionType2 = "Write" # Décommenté pour pouvoir être utilisé ci-dessous
 
 # Titre de la console
 $Host.UI.RawUI.WindowTitle = "mediaType : $mediaType | actionType : $actionType"
 
-# Exécution du script Python via uv avec l'environnement virtuel global
-# uv run --python "$globalEnv\Scripts\python.exe" $pyPath --jsonPath $jsonPath --mediaType $mediaType --actionType $actionType
-# uv run --python "$globalEnv\Scripts\python.exe" $pyPath --jsonPath $jsonPath --mediaType $mediaType --actionType $actionType2
-uv run --python "$globalEnv\Scripts\python.exe" $pyVPath
+# 1. Exécution du script Main.py avec actionType
+uv run --python $pyExe python -OO $pyPath --jsonPath $jsonPath --mediaType $mediaType --actionType $actionType
+# 2. Exécution du script Main.py avec actionType2
+# uv run --python $pyExe python -OO $pyPath --jsonPath $jsonPath --mediaType $mediaType --actionType $actionType2
+# 3. Exécution de l'application vidéo seule (CVideoApp.py)
+# uv run --python $pyExe python -OO $pyVPath
 
 # --- Section .NET ---
 # Publication et exécution si la publication réussit 
