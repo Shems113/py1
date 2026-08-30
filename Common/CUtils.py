@@ -23,7 +23,6 @@ from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
-import numpy as np
 import pandas as pd
 
 # Mappings des types MIME
@@ -378,14 +377,6 @@ def data_frame_to_csv(
         decimal=get_decimal_separator(),
         index=False,
     )
-
-
-def select_from_dico(dico: Dict[Any, Any], default_value: Any) -> np.ndarray:
-    """Vectorisation np.select à partir d'un dictionnaire {valeur: condition}."""
-    condlist = list(dico.values())
-    choicelist = list(dico.keys())
-    return np.select(condlist, choicelist, default=default_value)
-
 
 def compute_carrefour_bill_values(
     df: pd.DataFrame,

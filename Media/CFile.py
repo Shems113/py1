@@ -1,4 +1,3 @@
-from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -12,7 +11,6 @@ from Common.CUtils import (
     get_file_common_fields,
     get_file_name_extension,
     get_file_name_without_extension,
-    get_folder_name,
     is_audio,
     is_video,
     move_media_file,
