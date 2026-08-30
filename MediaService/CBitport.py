@@ -149,7 +149,7 @@ class CBitport:
                 return False
         
         unique_folder_names = (
-            (df_input["tmdb_id"].astype('string') + "_" + df_input["name"].str.strip()).dropna().unique()
+            (df_input["name"].str.strip() + "_" + df_input["tmdb_id"].astype('string')).dropna().unique()
         )
 
         for folder_name in unique_folder_names:
@@ -191,7 +191,7 @@ class CBitport:
             f["name"]: f["code"] for f in root_folders if "name" in f and "code" in f
         }
 
-        for row in df_best[df_best["is_best"]].itertuples():
+        for row in df_best[df_best["selection_status"].isin(["#1_best", "#2_best_quality_lower_size"])].itertuples():
             tmdb_id = getattr(row, "tmdb_id", None)
             name = getattr(row, "name", None)
             magnet_val = getattr(row, "magnet", None)
@@ -199,11 +199,11 @@ class CBitport:
             if not magnet_val or pd.isna(magnet_val):
                 continue
 
-            folder_name = (str(tmdb_id) + "_" + name.strip())
+            folder_name = (name.strip() + "_" + str(tmdb_id))
             folder_code = folder_map.get(folder_name)
 
             if not folder_code:
-                (folder_name,folder_code) = next(((k,v) for k,v in folder_map.items() if (k.split("_")[0]==str(tmdb_id))), (None, None))
+                (folder_name,folder_code) = next(((k,v) for k,v in folder_map.items() if (k.split("_")[-1]==str(tmdb_id))), (None, None))
 
             if not folder_code:
                 print(
