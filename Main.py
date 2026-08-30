@@ -45,7 +45,7 @@ def main() -> None:
         "--jsonPath",
         type=str,
         help="Path to the JSON settings file",
-        default=r"Files\Settings.json",
+        default=str(Path("Files") / "Settings.json"),
     )
     parser.add_argument(
         "--mediaType",
