@@ -16,7 +16,7 @@ $pyPath     = "D:\Projets\Python\repos\py1\Main.py"
 $pyVPath    = "D:\Projets\Python\repos\py1\CVideoApp.py"
 $jsonPath   = "D:\Projets\Python\repos\py1\Files\Settings.json"
 
-$mediaType  = "Music"
+$mediaType  = "Video"
 $actionType = "Read"
 $actionType2 = "Write" # Décommenté pour pouvoir être utilisé ci-dessous
 

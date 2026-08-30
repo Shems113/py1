@@ -58,7 +58,7 @@
     "MediaType": "Video",
     "Action": "Read",
     "RootSourcePath": "E:\\",
-    "RootSourcePaths": "C:\\Users\\SEDOUD\\Videos\\New\\2026-08-28_22_23_35",
+    "RootSourcePaths": "C:\\Users\\SEDOUD\\Videos\\New\\New\\",
     "LogRootSourcePath": "D:\\Result\\Logs\\",
     "RootTargetPath": "D:\\Result\\Video\\",
     "FilePatterns": [

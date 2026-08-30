@@ -34,11 +34,10 @@ def handle_response(response: requests.Response, include_json: bool = False) -> 
         print(data)
     return data
 
-
 def _concat_unique_data(series: pd.Series) -> str:
-    """Joint les valeurs uniques non nuls d'une Série avec un séparateur pipe."""
-    return " | ".join(series.dropna().astype(str).unique())
-
+    """Concatène les valeurs uniques non nuls d'une série Pandas."""
+    unique_vals = series.dropna().unique()
+    return " | ".join(str(v) for v in unique_vals if v)
 
 def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
     """Filtre et classe un DataFrame de torrents pour sélectionner la meilleure option par film.
@@ -81,9 +80,12 @@ def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
         mask = df["quality_clean"].str.contains(qual, regex=False)
         df.loc[mask, "quality_rank"] = rank
 
-    # 3. Agrégation par version de torrent
+    # 3. Extraction du hash dans une nouvelle colonne temporaire
+    df["magnet_hash"] = df["magnet"].apply(extract_magnet_hash)
+
+    # 4. Agrégation par version de torrent
     df_agg = df.groupby(
-        ["tmdb_id", "name", "magnet"], as_index=False
+        ["tmdb_id", "name", "magnet_hash"], as_index=False
     ).agg(
         {
             "source": _concat_unique_data,
@@ -91,12 +93,13 @@ def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
             "quality": _concat_unique_data,
             "seeds": "sum",
             "leechs": "sum",
-            "size_gb": "mean",
+            "size_gb": "first",
             "quality_rank": "max",
+            "magnet": "first",
         }
     )
 
-    # 4. Calcul du score/rang d'éligibilité (taille <= 5 Go et au moins 1 seeder)
+    # 5. Calcul vectorisé du score d'éligibilité (taille <= 5 Go et au moins 1 seeder)
     is_valid = (
         (df_agg["size_gb"] <= 5.0)
         & (df_agg["size_gb"] > 0)
@@ -105,19 +108,89 @@ def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
     )
     df_agg["rank_score"] = df_agg["quality_rank"].where(is_valid, -1)
 
-    # 5. Tri et sélection du meilleur torrent par film (tmdb_id)
-    df_sorted = df_agg.sort_values(
-        by=["tmdb_id", "rank_score", "quality_rank", "size_gb", "seeds"],
-        ascending=[True, False, False, True, False],
-    )
-    df_sorted=df_sorted[["tmdb_id","name","source","title","quality","seeds","leechs","size_gb","quality_rank","rank_score","magnet"]]
+    # 6. Dictionnaire de sens de tri pour chaque colonne
+    ascending_cols = {
+        "tmdb_id": True,
+        "rank_score": False,
+        "quality_rank": False,
+        "size_gb": True,   # Plus petite taille en premier
+        "seeds": False,    # Plus grand nombre de seeders en premier
+    }
 
-    # Identification du meilleur enregistrement
-    df_sorted["is_best"] = False
-    best_indices = df_sorted.groupby("tmdb_id", as_index=False).head(1).index
-    df_sorted.loc[best_indices, "is_best"] = True
+    # Liste des critères secondaires (1: Taille puis Seeds, 2: Seeds puis Taille)
+    criteria_cols = [["size_gb", "seeds"], ["seeds", "size_gb"]]
+    idx_criteria = []
 
-    return df_sorted
+    # 7. Extraction générique des rangs 1 et 2 pour chaque critère
+    for cols in criteria_cols:
+        by_cols = ["tmdb_id", "rank_score", "quality_rank"] + cols
+        df_criteria = df_agg.sort_values(
+            by=by_cols, ascending=[ascending_cols[col] for col in by_cols]
+        )
+
+        # Rang 1
+        idx_1 = set(df_criteria.groupby("tmdb_id", observed=True).head(1).index)
+        # Rang 2 (après exclusion du rang 1)
+        idx_2 = set(
+            df_criteria[~df_criteria.index.isin(idx_1)]
+            .groupby("tmdb_id", observed=True)
+            .head(1)
+            .index
+        )
+        idx_criteria.append((idx_1, idx_2))
+
+    # 8. Masques booléens vectorisés
+    idx_all = df_agg.index
+
+    # Critère 0 (Taille prioritaire)
+    is_s1 = idx_all.isin(idx_criteria[0][0])
+    is_s2 = idx_all.isin(idx_criteria[0][1])
+
+    # Critère 1 (Seeds prioritaires)
+    is_d1 = idx_all.isin(idx_criteria[1][0])
+    is_d2 = idx_all.isin(idx_criteria[1][1])
+
+    # 9. Application des règles de priorité
+    conditions = [
+        is_s1 & is_d1,  # #1_best
+        is_s1,          # #2_best_quality_lower_size
+        is_d1,          # #3_best_quality_best_seeds
+        is_s2 & is_d2,  # #4_best_2
+        is_s2,          # #5_best_quality_lower_size_2
+        is_d2,          # #6_best_quality_best_seeds_2
+    ]
+
+    choices = [
+        "#1_best",
+        "#2_best_quality_lower_size",
+        "#3_best_quality_best_seeds",
+        "#4_best_2",
+        "#5_best_quality_lower_size_2",
+        "#6_best_quality_best_seeds_2",
+    ]
+
+    df_agg = (
+        df_agg.assign(selection_status= np.select(conditions, choices, default="#7_other"))
+        .sort_values(by=["tmdb_id","selection_status"], ascending=[True,True])
+        )
+
+    # 10. Re-tri final sur la vue principale et sélection des colonnes
+    output_cols = [
+        "tmdb_id",
+        "name",
+        "source",
+        "title",
+        "quality",
+        "seeds",
+        "leechs",
+        "size_gb",
+        "quality_rank",
+        "rank_score",
+        "selection_status",
+        "magnet",
+    ]
+
+    return df_agg[output_cols]
 
 def parse_int(value: str) -> int:
     """Extrait un entier depuis une chaîne (ex: '1 250 seeds' -> 1250).
@@ -247,3 +320,21 @@ def is_latin(texte: str) -> bool:
         if char.isalpha() and not reg.match(r'\p{Script=Latin}', char):
             return False
     return True
+
+def extract_magnet_hash(magnet_link: str) -> Optional[str]:
+    """Extrait le Info Hash (BTIH) d'un lien magnet et le met en minuscules."""
+    if not isinstance(magnet_link, str):
+        return None
+
+    # Capture le hash hexadécimal (40 car.) ou Base32 (32 car.)
+    match = re.search(
+        r"xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})", magnet_link
+    )
+    return match.group(1).lower() if match else None
+
+
+def is_same_magnet(link1: str, link2: str) -> bool:
+    """Vérifie si deux liens magnet pointent vers le même torrent."""
+    h1 = extract_magnet_hash(link1)
+    h2 = extract_magnet_hash(link2)
+    return h1 is not None and h1 == h2
