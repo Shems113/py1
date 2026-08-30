@@ -77,7 +77,7 @@
     "MediaType": "Video",
     "Action": "Write",
     "RootSourcePath": "/tmp/ramdisk/output/Video/videoInput.csv",
-    "LogRootSourcePath": "/root/py1/logs/",
+    "LogRootSourcePath": "/root/py1/logs/"
   },
   {
     "MediaType": "Gmail",
@@ -95,6 +95,6 @@
     "RootSourcePath": "/root/py1/py/Files/GmailApiSettings.json",
     "ExtraFileRootSourcePath": "/tmp/ramdisk/output/Gmail/gmailMessageResult.csv",
     "LogRootSourcePath": "/root/py1/logs/",
-    "RootTargetPath": "/tmp/ramdisk/output/Gmail/",
+    "RootTargetPath": "/tmp/ramdisk/output/Gmail/"
   }
 ]
