@@ -1,8 +1,12 @@
+import sys
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
-import win32com.client as win32
+
+IS_WINDOWS = sys.platform == "win32"
+win32 = __import__("win32com.client").client if IS_WINDOWS else None
 
 from Common.CUtils import (
     compute_carrefour_bill_values,
@@ -13,48 +17,58 @@ from Common.EEnums import EActionType, EMediaType
 from Media.CMedia import CMedia
 
 
+def win32_required(func: Callable) -> Callable:
+    """Décorateur pour restreindre l'exécution des méthodes Word à Windows."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not IS_WINDOWS or not self.word:
+            raise NotImplementedError(
+                f"L'action '{func.__name__}' sur les fichiers Word nécessite MS Word sous Windows."
+            )
+        return func(self, *args, **kwargs)
+    return wrapper
+
+
 class CWord(CMedia):
     def __init__(self, json_path: Union[str, Path], action_type: EActionType) -> None:
         super().__init__(json_path, EMediaType.Word, action_type)
-        self.word = self.logger.logElapsedTime(
-            lambda: win32.Dispatch("Word.Application"), "Start Word application"
-        )
-        self.word.Visible = False
+        self.word = None
+        if IS_WINDOWS and win32:
+            self.word = self.logger.logElapsedTime(
+                lambda: win32.Dispatch("Word.Application"), "Start Word application"
+            )
+            self.word.Visible = False
+
         self.df, self.value_by_bookmark = self.get_data()
         self.shuffle_df: bool = False
 
     def get_data(self) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         if self.action_type == EActionType.Write and self.other_source_path:
             df = data_frame_from_csv(str(self.other_source_path), self.data_separator)
-            filtered = df[df["isSelected"] == 1].drop(columns=["isSelected"])
-            return compute_carrefour_bill_values(filtered)
+            return compute_carrefour_bill_values(df[df["isSelected"] == 1].drop(columns=["isSelected"]))
         return pd.DataFrame(), {}
 
     def close(self) -> None:
-        if getattr(self, "word", None):
+        if IS_WINDOWS and self.word:
             self.logger.logElapsedTime(self.word.Quit, "Quit Word application")
 
+    @win32_required
     def read(self) -> None:
-        self._word_action("Read bookmarks of ", [self._read_document_bookmarks], None)
+        self._word_action("Read bookmarks of ", [self._read_document_bookmarks])
 
+    @win32_required
     def bookmark(self) -> None:
         self._word_action(
-            "Bookmark ", [self._delete_document_bookmarks, self._add_document_bookmarks], 16
+            "Bookmark ", [self._delete_document_bookmarks, self._add_document_bookmarks], file_format=16
         )
 
+    @win32_required
     def write(self) -> None:
-        self._word_action(
-            "Write bookmarks of ",
-            [
-                self._read_document_bookmarks,
-                self._write_document_bookmarks,
-                self._delete_document_bookmarks,
-            ],
-            17,
-        )
+        actions = [self._read_document_bookmarks, self._write_document_bookmarks, self._delete_document_bookmarks]
+        self._word_action("Write bookmarks of ", actions, file_format=17)
 
     def _word_action(
-        self, label_prefix: str, document_actions: List[Callable[[Any], Any]], file_format: Optional[int]
+        self, label_prefix: str, document_actions: List[Callable[[Any], Any]], file_format: Optional[int] = None
     ) -> None:
         for file_path in self.get_source_files():
             self.logger.logElapsedTime(
@@ -85,11 +99,8 @@ class CWord(CMedia):
 
     def _add_document_bookmarks(self, doc: Any) -> str:
         for r in self.df.itertuples(index=False):
-            target_range = (
-                doc.Tables[int(r.value)].Range
-                if getattr(r, "type", None) == "table"
-                else self._find_range(doc, str(r.value))
-            )
+            is_table = getattr(r, "type", None) == "table"
+            target_range = doc.Tables[int(r.value)].Range if is_table else self._find_range(doc, str(r.value))
 
             if target_range:
                 self.logger.log(f"Add bookmark : {doc.Bookmarks.Add(str(r.name), target_range)}")
@@ -102,18 +113,15 @@ class CWord(CMedia):
         return rng if rng.Find.Execute(Text=text) else None
 
     def _write_document_bookmarks(self, doc: Any) -> str:
-        # Injection sécurisée des valeurs simples
         for name, val in self.value_by_bookmark.items():
             if doc.Bookmarks.Exists(name):
                 doc.Bookmarks(name).Range.Text = str(val)
 
         df = self.df.sample(frac=1).reset_index(drop=True) if self.shuffle_df else self.df
 
-        # Injection dans le tableau de produits
         if doc.Bookmarks.Exists("productTable"):
             table = doc.Bookmarks["productTable"].Range.Tables[0]
             last_range = table.Rows.First.Next.Range
-
             for i in range(len(df)):
                 last_range = table.Rows.Add(last_range).Range
                 for j in range(len(df.columns)):
