@@ -2,10 +2,10 @@
   {
     "MediaType": "File",
     "Action": "Read",
-    "RootSourcePath": "/root/py1/",
-    "LogRootSourcePath": "/root/py1/logs/",
-    "ExtraFileRootSourcePath": "/tmp/ramdisk/output/File/",
-    "RootTargetPath": "/tmp/ramdisk/output/File/Data/",
+    "RootSourcePath": "/workspace/",
+    "LogRootSourcePath": "/workspace/logs/",
+    "ExtraFileRootSourcePath": "/workspace/output/File/",
+    "RootTargetPath": "/workspace/output/File/Data/",
     "FilePatterns": [
       "*.jpg",
       "*.jpg",
@@ -37,9 +37,9 @@
   {
     "MediaType": "Video",
     "Action": "Read",
-    "RootSourcePath": "/tmp/ramdisk/input/Video/",
-    "LogRootSourcePath": "/root/py1/logs/",
-    "RootTargetPath": "/tmp/ramdisk/output/Video/",
+    "RootSourcePath": "/workspace/input/Video/",
+    "LogRootSourcePath": "/workspace/logs/",
+    "RootTargetPath": "/workspace/output/Video/",
     "FilePatterns": [
       "*.mkv",
       "*.m4v",
@@ -76,15 +76,15 @@
   {
     "MediaType": "Video",
     "Action": "Write",
-    "RootSourcePath": "/tmp/ramdisk/output/Video/videoInput.csv",
-    "LogRootSourcePath": "/root/py1/logs/"
+    "RootSourcePath": "/workspace/output/Video/videoInput.csv",
+    "LogRootSourcePath": "/workspace/logs/"
   },
   {
     "MediaType": "Gmail",
     "Action": "Read",
-    "RootSourcePath": "/root/py1/py/Files/GmailApiSettings.json",
-    "LogRootSourcePath": "/root/py1/logs/",
-    "RootTargetPath": "/tmp/ramdisk/output/Gmail/",
+    "RootSourcePath": "/workspace/py/Files/GmailApiSettings.json",
+    "LogRootSourcePath": "/workspace/logs/",
+    "RootTargetPath": "/workspace/output/Gmail/",
     "FilePatterns": [
       "in:anywhere AND has:attachment AND filename:pdf"
     ]
@@ -92,9 +92,9 @@
   {
     "MediaType": "Gmail",
     "Action": "Write",
-    "RootSourcePath": "/root/py1/py/Files/GmailApiSettings.json",
-    "ExtraFileRootSourcePath": "/tmp/ramdisk/output/Gmail/gmailMessageResult.csv",
-    "LogRootSourcePath": "/root/py1/logs/",
-    "RootTargetPath": "/tmp/ramdisk/output/Gmail/"
+    "RootSourcePath": "/workspace/py/Files/GmailApiSettings.json",
+    "ExtraFileRootSourcePath": "/workspace/output/Gmail/gmailMessageResult.csv",
+    "LogRootSourcePath": "/workspace/logs/",
+    "RootTargetPath": "/workspace/output/Gmail/"
   }
 ]
