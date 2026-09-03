@@ -9,6 +9,7 @@ from Common.CUtils import (
     get_audio_id3_tags,
     get_audio_tags,
     get_file_common_fields,
+    ensure_ffmpeg_available,
     get_video_chapters,
     get_video_streams,
     is_audio,
@@ -24,6 +25,7 @@ class CVideo(CMedia):
         self, json_path: Union[str, Path], action_type: EActionType
     ) -> None:
         super().__init__(json_path, EMediaType.Video, action_type)
+        ensure_ffmpeg_available()
 
     def read(self) -> None:
         """Lit les flux et métadonnées vidéo et les exporte sous forme de fichiers CSV."""

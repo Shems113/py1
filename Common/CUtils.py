@@ -9,9 +9,9 @@ import re
 import shutil
 import subprocess
 import time
+import pandas as pd
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from functools import cache
 import charset_normalizer
 from ffmpeg._probe import probe as ffmpeg_probe
 from mutagen.aac import AAC
@@ -23,7 +23,6 @@ from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
-import pandas as pd
 
 # Mappings des types MIME
 MIME_TYPE_TO_AUDIO = {
@@ -51,7 +50,6 @@ _DECIMAL_SEPARATOR: Optional[str] = None
 
 # --- FFMPEG & System Utilities ---
 
-@cache
 def get_ffmpeg_version() -> str:
     """Retourne la première ligne de version de FFmpeg."""
     try:
@@ -66,7 +64,6 @@ def get_ffmpeg_version() -> str:
     except Exception:
         return "ffmpeg introuvable dans le PATH"
 
-@cache
 def ensure_ffmpeg_available(verbose: bool = True) -> Optional[str]:
     """Vérifie la présence de ffmpeg."""
     global _FFMPEG_CHECKED
@@ -140,15 +137,11 @@ def add_audio_id3_images(
 
 def get_video_streams(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
     """Récupère les flux vidéo/audio via ffmpeg_probe."""
-    if not _FFMPEG_CHECKED:
-        ensure_ffmpeg_available()
     return ffmpeg_probe(str(file_path)).get("streams", [])
 
 
 def get_video_chapters(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
     """Récupère la liste des chapitres vidéo via ffmpeg_probe."""
-    if not _FFMPEG_CHECKED:
-        ensure_ffmpeg_available()
     return ffmpeg_probe(str(file_path), show_chapters=None).get("chapters", [])
 
 
