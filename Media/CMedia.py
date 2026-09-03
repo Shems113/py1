@@ -2,10 +2,10 @@ from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Union, Callable
-
+from typing import Any, Callable, Optional, Union
 import Common.CUtils as Utils
 from Common.CLogger import CLogger as Logger
+
 
 class CMedia:
     def __init__(
@@ -15,34 +15,50 @@ class CMedia:
         self.action_type = action_type
         self.data_separator: str = ";"
 
-        # Extraction optimisée de la configuration
-        json_file_path = Path(json_path)
-        self.item: Dict[str, Any] = self._load_item(json_file_path)
+        # Détermination dynamique de la racine du projet
+        self.project_root: Path = Path(__file__).resolve().parent
+
+        # Chargement de la configuration
+        self.item: dict[str, Any] = self._load_item(Path(json_path))
+
+        # Résolution universelle et générique des chemins
+        self.source_path: Path = self._resolve_path(self.item.get("RootSourcePath"))
+        
+        extra_path = self.item.get("ExtraFileRootSourcePath")
+        self.other_source_path: Optional[Path] = self._resolve_path(extra_path) if extra_path else None
+
+        target_path = self.item.get("RootTargetPath")
+        self.target_path: Optional[Path] = self._resolve_path(target_path) if target_path else None
+
+        log_root = self._resolve_path(self.item.get("LogRootSourcePath", "logs"))
 
         # Construction du chemin de log
         date_str = datetime.now().strftime("%d-%m-%Y")
         log_filename = f"{date_str}_{self.media_type.name}_{self.action_type.name}.txt"
-        log_root = Path(self.item["LogRootSourcePath"])
-        self.log_paths: List[str] = [str(log_root / log_filename)]
+        self.log_paths: list[str] = [str(log_root / log_filename)]
 
-        # Propriétés de structure (Pathlib native)
-        self.source_path: Path = Path(self.item["RootSourcePath"])
-        self.other_source_path: Optional[Path] = (
-            Path(self.item["ExtraFileRootSourcePath"])
-            if self.item.get("ExtraFileRootSourcePath")
-            else None
-        )
-        self.file_patterns: List[str] = self.item.get("FilePatterns", ["*"])
-        self.target_path: Optional[Path] = (
-            Path(self.item["RootTargetPath"])
-            if self.item.get("RootTargetPath")
-            else None
-        )
-        self.fieldsByCodec: Optional[Any] = self.item.get("Fields", {})
+        self.file_patterns: list[str] = self.item.get("FilePatterns", ["*"])
+        self.fieldsByCodec: Any = self.item.get("Fields", {})
+
+        # Création automatique de tous les répertoires s'ils n'existent pas
+        log_root.mkdir(parents=True, exist_ok=True)
+        if self.target_path and not self.target_path.suffix:
+            self.target_path.mkdir(parents=True, exist_ok=True)
 
         self.logger = Logger(self.log_paths)
 
-    def _load_item(self, json_path: Path) -> Dict[str, Any]:
+    def _resolve_path(self, raw_path: Union[str, Path, None]) -> Path:
+        """Résout un chemin de manière générique : absolu s'il l'est, sinon relatif à la racine du projet."""
+        if not raw_path:
+            return self.project_root
+            
+        path_obj = Path(str(raw_path))
+        if path_obj.is_absolute():
+            return path_obj
+        
+        return self.project_root / path_obj
+
+    def _load_item(self, json_path: Path) -> dict[str, Any]:
         """Extrait l'élément de configuration correspondant au MediaType et à l'Action."""
         media_name = self.media_type.name
         action_name = self.action_type.name
@@ -51,8 +67,7 @@ class CMedia:
 
         target_item = next(
             (
-                elem
-                for elem in data
+                elem for elem in data
                 if elem.get("MediaType") == media_name
                 and action_name.startswith(elem.get("Action", ""))
             ),
@@ -67,18 +82,17 @@ class CMedia:
 
         return target_item
 
-    def get_source_files(self) -> List[str]:
-        """Recherche les fichiers sources correspondant aux motifs définis."""
-
-        def fetch_files() -> List[str]:
+    def get_source_files(self) -> list[str]:
+        """Recherche les fichiers sources correspondant aux motifs définis de manière optimisée."""
+        def fetch_files() -> list[str]:
             if not self.source_path.exists():
                 return []
-            matched_files: set[Path] = set()
-            for pattern in self.file_patterns:
-                matched_files.update(
-                    p for p in self.source_path.rglob(pattern) if p.is_file()
-                )
-            return [str(p) for p in matched_files]
+            
+            matched_files = {
+                str(p) for pattern in self.file_patterns
+                for p in self.source_path.rglob(pattern) if p.is_file()
+            }
+            return list(matched_files)
 
         return self.logger.logElapsedTime(fetch_files, "Get source files")
 
@@ -100,10 +114,10 @@ class CMedia:
         Utils.remove_empty_folders(self.source_path)
 
     def process_files_parallel(
-        self, extract_func: Callable[[str], Dict[str, List[Dict[str, Any]]]]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        self, extract_func: Callable[[str], dict[str, list[dict[str, Any]]]]
+    ) -> dict[str, list[dict[str, Any]]]:
         """Exécute l'extraction d'attributs de fichiers en parallèle et accumule les résultats."""
-        data: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        data: dict[str, list[dict[str, Any]]] = defaultdict(list)
         files = self.get_source_files()
         total = len(files)
 
@@ -114,7 +128,6 @@ class CMedia:
             self.logger.log_file_progress(idx, total, file_path)
             return extract_func(file_path)
 
-        # Max_workers peut être ajusté selon tes besoins (ex: max_workers=8)
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = [
                 executor.submit(worker, idx, file_path)
