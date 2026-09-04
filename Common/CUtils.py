@@ -413,3 +413,11 @@ def compute_carrefour_bill_values(
         for k, v in values.items()
     }
     return df_res, formatted
+
+def format_timestamp(seconds: float) -> str:
+        """Convertit des secondes en format de timestamp SRT (HH:MM:SS,mmm)."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        milliseconds = int((seconds - int(seconds)) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"

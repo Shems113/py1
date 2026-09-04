@@ -116,7 +116,7 @@ class CBitport:
         res = handle_response(self.bitport_session.get(url)) or {}
 
         # files_data = (
-        #     res.get("data", {}).get("files", []) if isinstance(res, dict) else []
+        #     res.get("data", {"files": []}).get("files", []) if isinstance(res, dict) else []
         # )
         
         # L'export CSV ne s'exécute que si un chemin de sortie est fourni

@@ -1,6 +1,7 @@
 beautifulsoup4
 charset-normalizer
 curl-cffi
+faster-whisper
 ffmpeg-python
 flask
 google-api-python-client

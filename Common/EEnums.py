@@ -13,6 +13,7 @@ class EActionType(Enum):
     ReadAndCopy=3
     Write=4
     Bookmark=5
+    Transcribe=6
 
 class ETorrentSource(str, Enum):
     ALL = "All"

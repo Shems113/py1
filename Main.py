@@ -11,7 +11,7 @@ from Media.CWord import CWord as Word
 
 # Valeurs par défaut
 DEFAULT_MEDIA = EMediaType.Video
-DEFAULT_ACTION = EActionType.Read
+DEFAULT_ACTION = EActionType.Transcribe
 
 # Mappings des classes de médias et des actions associées
 MEDIA_MAPPING: Dict[EMediaType, Type] = {
@@ -28,6 +28,7 @@ ACTION_MAPPING: Dict[EActionType, str] = {
     EActionType.ReadAndCopy: "read",
     EActionType.Write: "write",
     EActionType.Bookmark: "bookmark",
+    EActionType.Transcribe: "transcribe"
 }
 
 
@@ -45,7 +46,7 @@ def main() -> None:
         "--jsonPath",
         type=str,
         help="Path to the JSON settings file",
-        default=str(Path("Files") / "Settings.json"),
+        default=str(Path("Files") / "SettingsWindows.json"),
     )
     parser.add_argument(
         "--mediaType",

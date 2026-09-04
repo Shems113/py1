@@ -4,8 +4,8 @@
     "Action": "Read",
     "RootSourcePath": "/workspace/",
     "LogRootSourcePath": "/workspace/logs/",
-    "ExtraFileRootSourcePath": "/workspace/output/File/",
-    "RootTargetPath": "/workspace/output/File/Data/",
+    "ExtraFileRootSourcePath": "/workspace/file/",
+    "RootTargetPath": "/workspace/file/result/",
     "FilePatterns": [
       "*.jpg",
       "*.jpg",
@@ -37,9 +37,9 @@
   {
     "MediaType": "Video",
     "Action": "Read",
-    "RootSourcePath": "/workspace/input/Video/",
+    "RootSourcePath": "/workspace/video/",
     "LogRootSourcePath": "/workspace/logs/",
-    "RootTargetPath": "/workspace/output/Video/",
+    "RootTargetPath": "/workspace/video/result/",
     "FilePatterns": [
       "*.mkv",
       "*.m4v",
@@ -76,8 +76,19 @@
   },
   {
     "MediaType": "Video",
+    "Action": "Transcribe",
+    "RootSourcePath": "/workspace/video/",
+    "LogRootSourcePath": "/workspace/logs/",
+    "RootTargetPath": "/workspace/subtile/result/",
+    "FilePatterns": [
+      "*.mp4",
+      "*.mp3"
+    ]
+  },
+  {
+    "MediaType": "Video",
     "Action": "Write",
-    "RootSourcePath": "/workspace/output/Video/videoInput.csv",
+    "RootSourcePath": "/workspace/video/result/videoInput.csv",
     "LogRootSourcePath": "/workspace/logs/"
   },
   {
@@ -85,7 +96,7 @@
     "Action": "Read",
     "RootSourcePath": "/workspace/git_project_python/Files/GmailApiSettings.json",
     "LogRootSourcePath": "/workspace/logs/",
-    "RootTargetPath": "/workspace/output/Gmail/",
+    "RootTargetPath": "/workspace/gmail/result/",
     "FilePatterns": [
       "in:anywhere AND has:attachment AND filename:pdf"
     ]
@@ -94,8 +105,8 @@
     "MediaType": "Gmail",
     "Action": "Write",
     "RootSourcePath": "/workspace/git_project_python/Files/GmailApiSettings.json",
-    "ExtraFileRootSourcePath": "/workspace/output/Gmail/gmailMessageResult.csv",
+    "ExtraFileRootSourcePath": "/workspace/gmail/result/gmailMessageResult.csv",
     "LogRootSourcePath": "/workspace/logs/",
-    "RootTargetPath": "/workspace/output/Gmail/"
+    "RootTargetPath": "/workspace/gmail/result/"
   }
 ]
