@@ -34,76 +34,46 @@ class CMusic(CMedia):
             )
             return
 
-        other_source = self.other_source_path
-
-        for codec_type, df in self._build_dataframes().items():
-            target_csv = other_source / f"{codec_type}Result.csv"
-
-            def export_csv() -> None:
-                data_frame_to_csv(
-                    df, target_csv, self.data_separator, self.fieldsByCodec.get(codec_type)
-                )
-
-            self.logger.logElapsedTime(export_csv, f"Display {codec_type}")
-
+        data = self.process_files_parallel(self._get_music_attributes_fields)
+        dfs = self._build_dataframes(data)
+        self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
         self.remove_empty_folders()
 
-    def _build_dataframes(self) -> Dict[str, pd.DataFrame]:
-        """Extrait les métadonnées de la musique et construit les DataFrames de données et d'agrégation."""
-        # 1. Extraction et stockage des attributs en parallèle
-        data = self.process_files_parallel(self._get_music_attributes_fields)
+    def _build_dataframes(self, data: Dict[str, List[Dict[str, Any]]]) -> Dict[str, pd.DataFrame]:
+            # Normalisation Pandas & construction des DataFrames (raw et agrégé)
+            raw_results: Dict[str, pd.DataFrame] = self.build_dataframes_by_codec(data)
+            agg_results: Dict[str, pd.DataFrame] = self.build_dataframes_by_codec(self._build_aggregated(raw_results), log_message="Aggregated ")
+            return raw_results | {f"{codec_type}Agg": df for codec_type, df in agg_results.items()}
+        
+    def _build_aggregated(self,data: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
+        aggregated = {}
+        for codec, df in data.items():
+            if df.empty:
+                aggregated[codec] = pd.DataFrame()
+                continue
 
-        # 2. Normalisation Pandas
-        def build_normalized() -> Dict[str, pd.DataFrame]:
-            return {
-                codec: pd.json_normalize(dicos) for codec, dicos in data.items()
-            }
-
-        raw_results: Dict[str, pd.DataFrame] = self.logger.logElapsedTime(
-            build_normalized, "Build dataframe with music files info"
-        )
-
-        # 3. Agrégation des statistiques par colonne
-        def build_aggregated() -> Dict[str, pd.DataFrame]:
-            aggregated = {}
-            for codec, df in raw_results.items():
-                if df.empty:
-                    aggregated[codec] = pd.DataFrame()
+            agg_dfs = []
+            for col in df.columns:
+                if col == "path":
                     continue
 
-                agg_dfs = []
-                for col in df.columns:
-                    if col == "path":
-                        continue
-
-                    counts = (
-                        df.value_counts(col)
-                        .to_frame("count")
-                        .reset_index()
-                        .assign(key=col)
-                        .rename(columns={col: "value"})[["key", "value", "count"]]
-                    )
-                    agg_dfs.append(counts)
-
-                aggregated[codec] = (
-                    pd.concat(agg_dfs, ignore_index=True)
-                    if agg_dfs
-                    else pd.DataFrame()
+                counts = (
+                    df.value_counts(col)
+                    .to_frame("count")
+                    .reset_index()
+                    .assign(key=col)
+                    .rename(columns={col: "value"})[["key", "value", "count"]]
                 )
-            return aggregated
+                agg_dfs.append(counts)
 
-        agg_results: Dict[str, pd.DataFrame] = self.logger.logElapsedTime(
-            build_aggregated,
-            "Build aggregated dataframe with music files info",
-        )
+            aggregated[codec] = (
+                pd.concat(agg_dfs, ignore_index=True)
+                if agg_dfs
+                else pd.DataFrame()
+            )
+        return aggregated
 
-        # 4. Fusion des dictionnaires de résultats
-        final_dfs = raw_results
-        for codec_type, df in agg_results.items():
-            final_dfs[f"{codec_type}Agg"] = df
-            
-        return final_dfs
-
+    
     def _get_music_attributes_fields(
         self, file_path: Union[str, Path]
     ) -> Dict[str, List[Dict[str, Any]]]:

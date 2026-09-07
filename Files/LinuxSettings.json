@@ -1,0 +1,124 @@
+{
+  "File": [
+    {
+      "Action": "Read",
+      "RootSourcePath": "/workspace/",
+      "LogRootSourcePath": "/workspace/logs/",
+      "ExtraFileRootSourcePath": "/workspace/file/",
+      "RootTargetPath": "/workspace/file/result/",
+      "FilePatterns": [
+        "*.jpg",
+        "*.jpg",
+        "*.jpeg",
+        "*.png",
+        "*.gif",
+        "*.webp",
+        "*.tiff",
+        "*.tif",
+        "*.bmp",
+        "*.heic",
+        "*.heif",
+        "*.raw",
+        "*.cr2",
+        "*.nef",
+        "*.arw",
+        "*.svg",
+        "*.mkv",
+        "*.m4v",
+        "*.mp4",
+        "*.mpeg",
+        "*.mpg",
+        "*.avi",
+        "*.wmv",
+        "*.srt",
+        "*.ts"
+      ]
+    }
+  ],
+  "Video": [
+    {
+      "Action": "Read",
+      "RootSourcePath": "/workspace/video/",
+      "LogRootSourcePath": "/workspace/logs/",
+      "RootTargetPath": "/workspace/video/result/",
+      "FilePatterns": [
+        "*.mkv",
+        "*.m4v",
+        "*.mp4",
+        "*.mpeg",
+        "*.mpg",
+        "*.avi",
+        "*.wmv",
+        "*.srt",
+        "*.ts"
+      ],
+      "Fields": {
+        "video": [
+          "path",
+          "extension",
+          "sizeInBytes",
+          "lastModified",
+          "index",
+          "codec_name",
+          "codec_long_name",
+          "profile",
+          "codec_type",
+          "codec_tag_string",
+          "codec_tag",
+          "mime_codec_string",
+          "width",
+          "height",
+          "duration_ts",
+          "duration",
+          "r_frame_rate",
+          "bit_rate"
+        ]
+      }
+    },
+    {
+      "Action": "Write",
+      "RootSourcePath": "/workspace/video/result/videoInput.csv",
+      "LogRootSourcePath": "/workspace/logs/"
+    }
+  ],
+  "Subtitle": [
+    {
+      "Action": "Read",
+      "RootSourcePath": "/workspace/video/",
+      "LogRootSourcePath": "/workspace/logs/",
+      "RootTargetPath": "/workspace/subtile/result/",
+      "FilePatterns": [
+        "*.srt"
+      ]
+    },
+    {
+      "Action": "Transcribe",
+      "RootSourcePath": "/workspace/video/",
+      "LogRootSourcePath": "/workspace/logs/",
+      "ExtraFileRootSourcePath": "/workspace/subtile/result/",
+      "RootTargetPath": "/workspace/subtile/",
+      "FilePatterns": [
+        "*.mp4",
+        "*.mp3"
+      ]
+    }
+  ],
+  "Gmail": [
+    {
+      "Action": "Read",
+      "RootSourcePath": "/workspace/git_project_python/Files/GmailApiSettings.json",
+      "LogRootSourcePath": "/workspace/logs/",
+      "RootTargetPath": "/workspace/gmail/result/",
+      "FilePatterns": [
+        "in:anywhere AND has:attachment AND filename:pdf"
+      ]
+    },
+    {
+      "Action": "Write",
+      "RootSourcePath": "/workspace/git_project_python/Files/GmailApiSettings.json",
+      "ExtraFileRootSourcePath": "/workspace/gmail/result/gmailMessageResult.csv",
+      "LogRootSourcePath": "/workspace/logs/",
+      "RootTargetPath": "/workspace/gmail/result/"
+    }
+  ]
+}

@@ -18,7 +18,6 @@ from Common.CUtils import (
 from Common.EEnums import EActionType, EMediaType
 from Media.CMedia import CMedia
 
-
 class CFile(CMedia):
     def __init__(
         self, json_path: Union[str, Path], action_type: EActionType
@@ -33,30 +32,9 @@ class CFile(CMedia):
             )
             return
 
-        other_source_dir = self.other_source_path
-
-        for codec_type, df in self._build_dataframes().items():
-            csv_path = other_source_dir / f"{codec_type}Result.csv"
-
-            def export_csv() -> None:
-                data_frame_to_csv(
-                    df, csv_path, self.data_separator, self.fieldsByCodec.get(codec_type)
-                )
-
-            self.logger.logElapsedTime(export_csv, f"Display {codec_type}")
-
-    def _build_dataframes(self) -> Dict[str, pd.DataFrame]:
-        """Extrait les attributs des fichiers et construit le DataFrame de données."""
         data = self.process_files_parallel(self._get_file_attributes_fields)
-
-        def build_normalized() -> Dict[str, pd.DataFrame]:
-            return {
-                codec: pd.json_normalize(dicos) for codec, dicos in data.items()
-            }
-
-        return self.logger.logElapsedTime(
-            build_normalized, "Build dataframe with files info"
-        )
+        dfs= self.build_dataframes_by_codec(data)
+        self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
 
     def _get_file_attributes_fields(
         self, file_path: Union[str, Path]

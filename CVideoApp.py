@@ -95,7 +95,7 @@ class CVideoApp:
 
         @self.app.route("/discoverBitportCloudVideos")
         def discover_bitport_cloud_videos():
-            return jsonify(self.bitport.discover_bitport_cloud_videos())
+            return jsonify(self.bitport.discover_bitport_cloud_videos(self.csv_paths["output"]))
 
         @self.app.route("/createFilmFoldersInBitport", endpoint="create_film_folders_in_bitport")
         def create_film_folders_in_bitport():

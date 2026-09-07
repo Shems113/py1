@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{f361b985-6cb5-4376-83ea-e7a2e7b53dee}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>Main.py</StartupFile>
+    <StartupFile>Compile.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -20,6 +20,7 @@
     <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Common\CLazy.py" />
     <Compile Include="Compile.py" />
     <Compile Include="MediaService\CBitport.py" />
     <Compile Include="MediaService\COpenSubtitles.py" />
@@ -28,6 +29,7 @@
     <Compile Include="Media\CFile.py" />
     <Compile Include="Media\CGmail.py" />
     <Compile Include="Media\CMusic.py" />
+    <Compile Include="Media\CSubtitle.py" />
     <Compile Include="Media\CVideo.py" />
     <Compile Include="Media\CWord.py" />
     <Compile Include="Common\EEnums.py" />
@@ -53,8 +55,8 @@
   <ItemGroup>
     <Content Include="Files\cmd.ps1" />
     <Content Include="Files\GmailApiSettings.json" />
-    <Content Include="Files\Settings.json" />
-    <Content Include="Files\SettingsWindows.json" />
+    <Content Include="Files\LinuxSettings.json" />
+    <Content Include="Files\WindowsSettings.json" />
     <Content Include="requirements.txt" />
     <Content Include="Templates\index.html" />
     <Content Include="Torrent\CScraperYts.py" />

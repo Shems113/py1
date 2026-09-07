@@ -92,50 +92,28 @@ class CGmail(CMedia):
             )
             return
 
-        target_dir = self.target_path
-
-        for key, df in self._build_dataframes().items():
-            csv_path = target_dir / f"{key}Result.csv"
-
-            def export_csv() -> None:
-                data_frame_to_csv(df, csv_path, self.data_separator, self.fieldsByCodec.get(key))
-
-            self.logger.logElapsedTime(export_csv, f"Display {key}")
+        dfs= self._build_dataframes()
+        self.export_dataframes_to_csv_by_codec(dfs)
 
     def _build_dataframes(self) -> Dict[str, pd.DataFrame]:
         """Construit les DataFrames résumant les labels et la liste des messages."""
         results = {}
-
-        # 1. Labels
-        try:
-            def get_labels_df() -> pd.DataFrame:
-                return pd.DataFrame(self._list_labels())
-
-            results["gmailLabel"] = self.logger.logElapsedTime(
-                get_labels_df, "Build dataframe with Gmail labels"
-            )
-        except HttpError as error:
-            self.logger.logError(f"An error occurred getting labels: {error}")
-            results["gmailLabel"] = pd.DataFrame()
-
-        # 2. Messages
-        try:
-            def get_messages_df() -> pd.DataFrame:
-                return pd.DataFrame(self._list_messages())
-
-            results["gmailMessage"] = self.logger.logElapsedTime(
-                get_messages_df, "Build dataframe with Gmail messages"
-            )
-        except HttpError as error:
-            self.logger.logError(f"An error occurred getting messages: {error}")
-            results["gmailMessage"] = pd.DataFrame()
+        for data_type, func in [("gmailLabel",self._list_labels), ("gmailMessage", self._list_messages)]:
+            results[data_type] = pd.DataFrame()
+            try:
+                results[data_type] = self.logger.logElapsedTime(
+                    func, f"Build dataframe with {data_type[5:]}s"
+                )
+            except HttpError as error:
+                self.logger.logError(f"An error occurred getting {data_type[5:]}s: {error}")
+                results[data_type] = pd.DataFrame()
 
         return results
 
-    def _list_labels(self) -> List[Dict[str, Any]]:
+    def _list_labels(self) -> pd.DataFrame:
         """Récupère la liste des étiquettes (labels) de l'utilisateur."""
         if not self.gmail_api_service:
-            return []
+            return pd.DataFrame()
 
         request = self.gmail_api_service.users().labels().list(
             userId=self.USER_ID
@@ -143,14 +121,14 @@ class CGmail(CMedia):
         response = self.logger.logElapsedTime(
             request.execute, "Get Gmail labels list"
         )
-        return response.get("labels", [])
+        return pd.DataFrame(response.get("labels", []))
 
     def _list_messages(
         self, label_ids: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> pd.DataFrame:
         """Récupère la liste complète des messages correspondant au motif avec pagination."""
         if not self.gmail_api_service:
-            return []
+            return pd.DataFrame()
 
         label_ids = label_ids or []
         query_pattern = self.file_patterns[0] if self.file_patterns else ""
@@ -175,7 +153,7 @@ class CGmail(CMedia):
             )
             page_index += 1
 
-        return messages
+        return pd.DataFrame(messages)
 
     def write(self) -> None:
         """Récupère les détails avancés des messages (ainsi que leurs pièces jointes) et les exporte."""

@@ -2,10 +2,11 @@ from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
+
+import pandas as pd
 import Common.CUtils as Utils
 from Common.CLogger import CLogger as Logger
-
 
 class CMedia:
     def __init__(
@@ -67,9 +68,8 @@ class CMedia:
 
         target_item = next(
             (
-                elem for elem in data
-                if elem.get("MediaType") == media_name
-                and action_name.startswith(elem.get("Action", ""))
+                elem for elem in data.get(media_name, []) 
+                if action_name.startswith(elem.get("Action", ""))
             ),
             None,
         )
@@ -140,3 +140,40 @@ class CMedia:
                     data[codec_type].extend(dicos)
 
         return data
+
+    def build_dataframes_by_codec(
+        self, data: Dict[str, List[Dict[str, Any]]], log_message: str=""
+    ) -> Dict[str, pd.DataFrame]:
+        """Extrait les attributs des fichiers et construit le DataFrame de données."""
+
+        def build_normalized() -> Dict[str, pd.DataFrame]:
+            return (
+                {codec_type: (value if isinstance(value, pd.DataFrame) else pd.json_normalize(value))
+                for codec_type, value in data.items()}
+                )
+
+        return self.logger.logElapsedTime(
+            build_normalized, f"Build dataframe with {log_message}{self.media_type.name} files info"
+        )
+
+    def export_dataframes_to_csv_by_codec(
+        self, dicoOfDataframes: Dict[str, pd.DataFrame], isOtherSource: bool=False
+    ) -> None:
+        """Méthode factorisée pour exporter un dictionnaire de DataFrames en CSV."""
+        if not self.target_path:
+            self.logger.log(
+                "Warning: target_path non défini pour le stockage des CSV."
+            )
+            return
+
+        target_dir = self.target_path if not isOtherSource else self.other_source_path
+
+        for codec_type, df in dicoOfDataframes.items():
+            csv_file_path = target_dir / f"{codec_type}Result.csv"
+
+            def export_csv() -> None:
+                Utils.data_frame_to_csv(
+                    df, csv_file_path, self.data_separator, self.fieldsByCodec.get(codec_type)
+                )
+
+            self.logger.logElapsedTime(export_csv, f"Display {codec_type}")

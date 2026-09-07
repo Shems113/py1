@@ -4,8 +4,9 @@ class EMediaType(Enum):
     File=1
     Gmail=2
     Music=3
-    Video=4
-    Word=5
+    Subtitle=4
+    Video=5
+    Word=6
 
 class EActionType(Enum):
     Read=1

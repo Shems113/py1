@@ -1,23 +1,26 @@
 import argparse
 from pathlib import Path
+import platform
 from typing import Dict, Type, Union
 
 from Common.EEnums import EActionType, EMediaType
 from Media.CFile import CFile as File
 from Media.CGmail import CGmail as Gmail
 from Media.CMusic import CMusic as Music
+from Media.CSubtitle import CSubtitle as Subtitle
 from Media.CVideo import CVideo as Video
 from Media.CWord import CWord as Word
 
 # Valeurs par défaut
-DEFAULT_MEDIA = EMediaType.Video
-DEFAULT_ACTION = EActionType.Transcribe
+DEFAULT_MEDIA = EMediaType.Subtitle
+DEFAULT_ACTION = EActionType.Read
 
 # Mappings des classes de médias et des actions associées
 MEDIA_MAPPING: Dict[EMediaType, Type] = {
     EMediaType.File: File,
     EMediaType.Gmail: Gmail,
     EMediaType.Music: Music,
+    EMediaType.Subtitle: Subtitle,
     EMediaType.Video: Video,
     EMediaType.Word: Word,
 }
@@ -30,7 +33,6 @@ ACTION_MAPPING: Dict[EActionType, str] = {
     EActionType.Bookmark: "bookmark",
     EActionType.Transcribe: "transcribe"
 }
-
 
 def process(media: Union[File, Gmail, Music, Video, Word], action_name: str) -> None:
     """Initialise les logs et exécute la méthode d'action sur l'instance de média."""
@@ -46,7 +48,7 @@ def main() -> None:
         "--jsonPath",
         type=str,
         help="Path to the JSON settings file",
-        default=str(Path("Files") / "SettingsWindows.json"),
+        default=str(Path("Files") / f"{('Windows' if platform.system() == 'Windows' else 'Linux')}Settings.json"),
     )
     parser.add_argument(
         "--mediaType",
