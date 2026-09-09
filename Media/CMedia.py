@@ -136,7 +136,7 @@ class CMedia:
             self.logger.log_file_progress(idx, total, file_path)
             return extract_func(file_path)
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             futures = [
                 executor.submit(worker, idx, file_path)
                 for idx, file_path in enumerate(files, start=1)
