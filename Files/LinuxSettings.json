@@ -101,6 +101,16 @@
         "*.mp4",
         "*.mp3"
       ]
+    },
+    {
+      "Action": "TranscribeAndCheck",
+      "RootSourcePath": "/workspace/video/",
+      "LogRootSourcePath": "/workspace/logs/",
+      "ExtraFileRootSourcePath": "/workspace/subtile/subtitleMapping.csv",
+      "RootTargetPath": "/workspace/subtile/",
+      "FilePatterns": [
+        "*.mp4"
+      ]
     }
   ],
   "Gmail": [

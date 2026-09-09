@@ -421,3 +421,7 @@ def format_timestamp(seconds: float) -> str:
         secs = int(seconds % 60)
         milliseconds = int((seconds - int(seconds)) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+    
+def time_to_seconds(t):
+    """Convertit un objet pysrt time en secondes."""
+    return t.hours * 3600 + t.minutes * 60 + t.seconds + t.milliseconds / 1000

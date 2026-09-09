@@ -65,14 +65,22 @@ class CMedia:
         action_name = self.action_type.name
 
         data = Utils.json_from_file(json_path)
+        items = data.get(media_name, [])
 
         target_item = next(
             (
-                elem for elem in data.get(media_name, []) 
-                if action_name.startswith(elem.get("Action", ""))
+                e for e in items if action_name == e.get("Action", "")
             ),
             None,
         )
+
+        if target_item is None:
+            target_item = next(
+                (
+                    e for e in items if action_name.startswith(e.get("Action", ""))
+                ),
+                None,
+            )
 
         if not target_item:
             raise ValueError(

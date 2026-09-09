@@ -15,6 +15,7 @@ class EActionType(Enum):
     Write=4
     Bookmark=5
     Transcribe=6
+    TranscribeAndCheck=7
 
 class ETorrentSource(str, Enum):
     ALL = "All"

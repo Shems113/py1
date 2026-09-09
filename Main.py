@@ -13,7 +13,7 @@ from Media.CWord import CWord as Word
 
 # Valeurs par défaut
 DEFAULT_MEDIA = EMediaType.Subtitle
-DEFAULT_ACTION = EActionType.Read
+DEFAULT_ACTION = EActionType.TranscribeAndCheck
 
 # Mappings des classes de médias et des actions associées
 MEDIA_MAPPING: Dict[EMediaType, Type] = {
@@ -31,7 +31,8 @@ ACTION_MAPPING: Dict[EActionType, str] = {
     EActionType.ReadAndCopy: "read",
     EActionType.Write: "write",
     EActionType.Bookmark: "bookmark",
-    EActionType.Transcribe: "transcribe"
+    EActionType.Transcribe: "transcribe",
+    EActionType.TranscribeAndCheck: "transcribeAndCheck",
 }
 
 def process(media: Union[File, Gmail, Music, Video, Word], action_name: str) -> None:
