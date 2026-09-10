@@ -197,11 +197,13 @@ class CSubtitle(CMedia):
                 "codec_type": "subtitle",
                 "subtitle_index": sub_index,
                 "subtitle_text_sample": f"{sub_text[:30]}..." ,
+                "whisper_segment_start": seg_start,
+                "whisper_segment_text_sample": f"{seg_text[:30]}..." ,
                 "time_difference_seconds": time_diff
             }
             for i, segment in enumerate(segments)
             for srt_path_obj, srts in dicoSrt.items()
-            for sub_index, sub_text, seg_start, time_diff in [self._check_subtitle_synchronization(i, segment, srt_path_obj, srts)]
+            for sub_index, sub_text, seg_start, seg_text, time_diff in [self._check_subtitle_synchronization(i, segment, srt_path_obj, srts)]
             if sub_index is not None  # Ignore si le fichier SRT est épuisé
         ]
         
@@ -226,10 +228,9 @@ class CSubtitle(CMedia):
         
         if index >= len(srts):
             self.logger.log(f"[{whisper_segment_start}] SRT #{index}: End of subtitle file {srt_path_obj.name} reached.")
-            return None, None, whisper_segment_start, None
-        
+            return None, None, whisper_segment_start, None, None
         current_srt = srts[index]
         current_srt_start = time_to_seconds(current_srt.start)
         time_difference_seconds = current_srt_start - whisper_segment_start
 
-        return current_srt.index, current_srt.text, whisper_segment_start, time_difference_seconds
+        return current_srt.index, current_srt.text.strip(), whisper_segment_start,whisper_segment_start.text.strip(), time_difference_seconds
