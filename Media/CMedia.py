@@ -46,6 +46,7 @@ class CMedia:
         if self.target_path and not self.target_path.suffix:
             self.target_path.mkdir(parents=True, exist_ok=True)
 
+        self.max_worker = 5
         self.logger = Logger(self.log_paths)
 
     def _resolve_path(self, raw_path: Union[str, Path, None]) -> Path:
@@ -136,7 +137,7 @@ class CMedia:
             self.logger.log_file_progress(idx, total, file_path)
             return extract_func(file_path)
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
+        with ThreadPoolExecutor(max_workers=self.max_worker) as executor:
             futures = [
                 executor.submit(worker, idx, file_path)
                 for idx, file_path in enumerate(files, start=1)

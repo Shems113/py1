@@ -97,9 +97,11 @@ class CSubtitle(CMedia):
             if platform.system() == "Windows":
                 device = "cpu"
                 compute_type = "int8" if compute_type == "default" else compute_type
+                self.max_worker = 4  # Allow multiple workers for CPU on Windows
             else:
                 device = "cuda"
                 compute_type = "float16" if compute_type == "default" else compute_type
+                self.max_worker = 1  # Limit to one worker for GPU to avoid memory issues
 
         self.logger.log(f"Loading Whisper model ({model_size}) on device '{device}' with compute_type '{compute_type}'...")
     
