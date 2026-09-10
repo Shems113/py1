@@ -197,8 +197,8 @@ class CSubtitle(CMedia):
                 "codec_type": "subtitle",
                 "subtitle_index": sub_index,
                 "subtitle_text_sample": f"{sub_text[:30]}..." ,
-                "whisper_segment_start": seg_start,
-                "whisper_segment_text_sample": f"{seg_text[:30]}..." ,
+                "segment_start": seg_start,
+                "segment_text_sample": f"{seg_text[:30]}..." ,
                 "time_difference_seconds": time_diff
             }
             for i, segment in enumerate(segments)
@@ -224,13 +224,13 @@ class CSubtitle(CMedia):
         return result
 
     def _check_subtitle_synchronization(self, index: int, segment: Any, srt_path_obj: Path, srts: Any) -> tuple:
-        whisper_segment_start = segment.get("start") if isinstance(segment, dict) else segment.start
+        segment_start = segment.get("start") if isinstance(segment, dict) else segment.start
         
         if index >= len(srts):
-            self.logger.log(f"[{whisper_segment_start}] SRT #{index}: End of subtitle file {srt_path_obj.name} reached.")
-            return None, None, whisper_segment_start, None, None
+            self.logger.log(f"[{segment_start}] SRT #{index}: End of subtitle file {srt_path_obj.name} reached.")
+            return None, None, segment_start, None, None
         current_srt = srts[index]
         current_srt_start = time_to_seconds(current_srt.start)
-        time_difference_seconds = current_srt_start - whisper_segment_start
+        time_difference_seconds = current_srt_start - segment_start
 
-        return current_srt.index, current_srt.text.strip(), whisper_segment_start,whisper_segment_start.text.strip(), time_difference_seconds
+        return current_srt.index, current_srt.text.strip(), segment_start, segment.text.strip(), time_difference_seconds
