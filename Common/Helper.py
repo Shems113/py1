@@ -239,15 +239,19 @@ def parse_size(text: str) -> str:
 def parse_quality(title: str) -> str:
     """Analyse le titre d'une release pour détecter sa qualité ou résolution (ex: 1080p, Bluray, WEB)."""
     patterns = [
+        # 1. Résolutions explicites précises (conservées intactes)
         (r"\b(2160p)\b", "2160p"),
         (r"\b(1080p)\b", "1080p"),
         (r"\b(720p)\b", "720p"),
         (r"\b(480p|360p)\b", "480p"),
-        (r"\b(4k|uhd)\b", "2160p"),
+        # 2. Equivalents textuels stricts
         (r"\b(fhd)\b", "1080p"),
-        (r"\b(hd)\b", "720p"),
         (r"\b(sd)\b", "480p"),
-        (r"\b(bluray|bdrip|brrip)\b", "Bluray"),
+        # 3. Termes génériques/marketing (évalués après les résolutions explicites)
+        (r"\b(4k|uhd|hdr|hdr10|dv|dolby\s*vision)\b", "2160p"),
+        (r"\b(hd)\b", "720p"),
+        # 4. Sources et formats
+        (r"\b(bluray|bdrip|brrip|remux)\b", "Bluray"),
         (r"\b(web-dl|webrip|web)\b", "WEB"),
         (r"\b(dvdrip|dvd)\b", "DVD"),
         (r"\b(hdrip|hdtv)\b", "HDTV"),

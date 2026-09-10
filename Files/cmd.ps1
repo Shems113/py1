@@ -14,20 +14,29 @@ $pyExe      = "$globalEnv\Scripts\python.exe"
 
 $pyPath     = "D:\Projets\Python\repos\py1\Main.py"
 $pyVPath    = "D:\Projets\Python\repos\py1\CVideoApp.py"
-$jsonPath   = "D:\Projets\Python\repos\py1\Files\Settings.json"
 
-$mediaType  = "Video"
+$mediaTypes = @("File", "Music", "Subtitle", "Video")
+$mediaType = @("Video")
 $actionType = "Read"
-$actionType2 = "Write" # Décommenté pour pouvoir être utilisé ci-dessous
 
-# Titre de la console
-$Host.UI.RawUI.WindowTitle = "mediaType : $mediaType | actionType : $actionType"
+# Assurez-vous que vos variables de chemin ($pyExe, $pyPath) sont définies avant.
+# $mediaTypes | ForEach-Object -Parallel {
+    # $mediaType = $_
+    # $actionType = $using:actionType
+    # $pyExe = $using:pyExe
+    # $pyPath = $using:pyPath
 
-# 1. Exécution du script Main.py avec actionType
-uv run --python $pyExe python -OO $pyPath --jsonPath $jsonPath --mediaType $mediaType --actionType $actionType
-# 2. Exécution du script Main.py avec actionType2
-# uv run --python $pyExe python -OO $pyPath --jsonPath $jsonPath --mediaType $mediaType --actionType $actionType2
-# 3. Exécution de l'application vidéo seule (CVideoApp.py)
+    # Write-Host "Démarrage pour : $mediaType"
+    
+    # Exécution de la commande
+    # uv run --python $pyExe python -OO $pyPath --mediaType $mediaType --actionType $actionType
+    
+    # Write-Host "Terminé pour : $mediaType"
+# } -ThrottleLimit 4 # Exécute les 4 en même temps (ajustez selon vos besoins)
+
+ uv run --python $pyExe python -OO $pyPath --mediaType $mediaType --actionType $actionType
+ 
+# 2. Exécution de l'application vidéo seule (CVideoApp.py)
 # uv run --python $pyExe python -OO $pyVPath
 
 # --- Section .NET ---

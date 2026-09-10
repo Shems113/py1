@@ -34,10 +34,19 @@ class CCommonTorrent(ABC):
 
     def __init__(self, mirrors: List[str], trackers: Optional[List[str]] = None):
         self.mirrors = mirrors
+        # Liste consolidée de trackers publics haute disponibilité
         self.trackers = trackers or [
             "udp://tracker.opentrackr.org:1337/announce",
+            "udp://open.demonii.com:1337/announce",
+            "udp://tracker.openbittorrent.com:80",
+            "udp://tracker.coppersurfer.tk:6969",
+            "udp://glotorrents.pw:6969/announce",
             "udp://open.stealth.si:80/announce",
             "udp://tracker.torrent.eu.org:451/announce",
+            "udp://tracker.moeking.me:6969/announce",
+            "udp://explodie.org:6969/announce",
+            "udp://ipv4.tracker.harry.lu:80/announce",
+            "https://tracker.tamersrealm.com:443/announce",
         ]
         self.session = requests.Session(impersonate="chrome120")
 

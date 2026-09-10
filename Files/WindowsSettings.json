@@ -58,8 +58,8 @@
   "Video": [
     {
       "Action": "Read",
-      "RootSourcePath": "E:\\",
-      "RootSourcePaths": "C:\\Users\\SEDOUD\\Videos\\New\\New\\",
+      "RootSourcePaths": "E:\\",
+      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\New\\Windows\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "RootTargetPath": "D:\\Result\\Video\\",
       "FilePatterns": [
@@ -105,7 +105,6 @@
     {
       "Action": "Read",
       "RootSourcePath": "E:\\",
-      "RootSourcePaths": "C:\\Users\\SEDOUD\\Videos\\New\\New\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "RootTargetPath": "D:\\Result\\Subtitle\\",
       "FilePatterns": [
@@ -114,7 +113,7 @@
     },
     {
       "Action": "Transcribe",
-      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\New\\",
+      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\New\\Windows\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "ExtraFileRootSourcePath": "D:\\Result\\Subtitle\\",
       "RootTargetPath": "D:\\Result\\Subtitle\\srt\\",
@@ -124,8 +123,7 @@
     },
     {
       "Action": "TranscribeAndCheck",
-      "RootSourcePaths": "E:\\Video\\US\\Val Kilmer\\",
-      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\New\\",
+      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\New\\Windows\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "ExtraFileRootSourcePath": "D:\\Result\\Subtitle\\subtitleMapping.csv",
       "RootTargetPath": "D:\\Result\\Subtitle\\",

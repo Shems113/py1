@@ -86,7 +86,7 @@
       "Action": "Read",
       "RootSourcePath": "/workspace/video/",
       "LogRootSourcePath": "/workspace/logs/",
-      "RootTargetPath": "/workspace/subtile/result/",
+      "RootTargetPath": "/workspace/subtitle/result/",
       "FilePatterns": [
         "*.srt"
       ]
@@ -95,8 +95,8 @@
       "Action": "Transcribe",
       "RootSourcePath": "/workspace/video/",
       "LogRootSourcePath": "/workspace/logs/",
-      "ExtraFileRootSourcePath": "/workspace/subtile/result/",
-      "RootTargetPath": "/workspace/subtile/",
+      "ExtraFileRootSourcePath": "/workspace/subtitle/result/",
+      "RootTargetPath": "/workspace/subtitle/",
       "FilePatterns": [
         "*.mp4",
         "*.mp3"
@@ -106,8 +106,8 @@
       "Action": "TranscribeAndCheck",
       "RootSourcePath": "/workspace/video/",
       "LogRootSourcePath": "/workspace/logs/",
-      "ExtraFileRootSourcePath": "/workspace/subtile/subtitleMapping.csv",
-      "RootTargetPath": "/workspace/subtile/",
+      "ExtraFileRootSourcePath": "/workspace/subtitle/subtitleMapping.csv",
+      "RootTargetPath": "/workspace/subtitle/",
       "FilePatterns": [
         "*.mp4"
       ]
