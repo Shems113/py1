@@ -35,7 +35,10 @@ ACTION_MAPPING: Dict[EActionType, str] = {
     EActionType.TranscribeAndCheck: "transcribeAndCheck",
 }
 
-def process(media: Union[File, Gmail, Music, Video, Word], action_name: str) -> None:
+def process(
+    media: Union[File, Gmail, Music, Video, Word],
+    action_name: str
+    ) -> None:
     """Initialise les logs et exécute la méthode d'action sur l'instance de média."""
     if hasattr(media, action_name) and callable(getattr(media, action_name)):
         media.init_log()
@@ -73,8 +76,8 @@ def main() -> None:
     # Instanciation et exécution
     media_class = MEDIA_MAPPING[media_type]
     media_instance = media_class(Path(args.jsonPath), action_type)
-    
-    process(media_instance, ACTION_MAPPING[action_type])
+    action_name = ACTION_MAPPING[action_type]
+    process(media_instance, action_name)
 
 
 if __name__ == "__main__":

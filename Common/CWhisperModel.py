@@ -20,7 +20,6 @@ class CWhisperModel:
         self.model_size_or_path: str = model_size_or_path
         self.device: str = device
         self.compute_type: str = compute_type
-        self.max_parallel_worker: int = 5
         self.logger = logger
         self.lazy_model: CLazy[Optional[WhisperModel]] = CLazy(self._load_model)
 
@@ -31,12 +30,10 @@ class CWhisperModel:
                 self.device = "cpu"
                 if self.compute_type == "default":
                     self.compute_type = "int8"
-                self.max_parallel_worker = 4
             else:
                 self.device = "cuda"
                 if self.compute_type == "default":
                     self.compute_type = "float16"
-                self.max_parallel_worker = 1
 
         self.logger.log(
             f"Loading Whisper model ({self.model_size_or_path}) on device '{self.device}' "

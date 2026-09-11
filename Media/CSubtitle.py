@@ -1,4 +1,5 @@
 from pathlib import Path
+import platform
 from typing import Union, Dict, Any, List
 import pysrt
 import pandas as pd
@@ -17,11 +18,14 @@ from Media.CVideo import CVideo
 
 class CSubtitle(CMedia):
     def __init__(
-        self, json_path: Union[str, Path], action_type: EActionType
+        self,
+        json_path: Union[str, Path],
+        action_type: EActionType
     ) -> None:
         super().__init__(json_path, EMediaType.Subtitle, action_type)
         self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3-turbo")
-        self.max_worker = self.whisper_model.max_parallel_worker
+        is_transcribe_action = action_type in [EActionType.Transcribe, EActionType.TranscribeAndCheck]
+        self.max_worker = (4 if (platform.system() == "Windows") and is_transcribe_action else 1)
         self.mapping_video_srt_files: Dict[Path, List[Path]] = {}
         self.tolerance_seconds = 0.2
         
