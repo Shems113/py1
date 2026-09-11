@@ -21,6 +21,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Common\CLazy.py" />
+    <Compile Include="Common\CWhisperModel.py" />
     <Compile Include="Compile.py" />
     <Compile Include="MediaService\CBitport.py" />
     <Compile Include="MediaService\COpenSubtitles.py" />

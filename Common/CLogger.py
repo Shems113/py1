@@ -40,7 +40,3 @@ class CLogger:
         self.log(f'Time spent in {funcName} : {elapsed_time:.2f} seconds')
         self.log(sep)
         return result
-
-
-
-

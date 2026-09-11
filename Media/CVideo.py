@@ -19,9 +19,12 @@ from Media.CMedia import CMedia
 
 class CVideo(CMedia):
     def __init__(
-        self, json_path: Union[str, Path], action_type: EActionType
+        self, 
+        json_path: Union[str, Path], 
+        action_type: EActionType , 
+        media_type: EMediaType = EMediaType.Video
     ) -> None:
-        super().__init__(json_path, EMediaType.Video, action_type)
+        super().__init__(json_path, media_type, action_type)
         ensure_ffmpeg_available()
 
     def read(self) -> None:
