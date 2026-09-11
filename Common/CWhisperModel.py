@@ -82,7 +82,6 @@ class CWhisperModel:
                 {
                     "start": segment.start,
                     "end": segment.end,
-                    "duration": segment.end - segment.start,
                     "text": segment.text
                 }
                 for segment in segments

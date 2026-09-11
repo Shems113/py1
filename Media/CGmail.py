@@ -40,7 +40,9 @@ class CGmail(CMedia):
     ]
 
     def __init__(
-        self, json_path: Union[str, Path], action_type: EActionType
+        self, 
+        json_path: Union[str, Path],
+        action_type: EActionType
     ) -> None:
         super().__init__(json_path, EMediaType.Gmail, action_type)
         self.gmail_api_service: Optional[Resource] = self._call_gmail_api_service()
@@ -124,7 +126,8 @@ class CGmail(CMedia):
         return pd.DataFrame(response.get("labels", []))
 
     def _list_messages(
-        self, label_ids: Optional[List[str]] = None
+        self, 
+        label_ids: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """Récupère la liste complète des messages correspondant au motif avec pagination."""
         if not self.gmail_api_service:
@@ -177,7 +180,8 @@ class CGmail(CMedia):
             self.logger.logElapsedTime(export_csv, f"Display {key}")
 
     def _build_dataframes_details(
-        self, df_source: pd.DataFrame
+        self, 
+        df_source: pd.DataFrame
     ) -> Dict[str, pd.DataFrame]:
         """Extrait les détails et pièces jointes de chaque message identifié."""
         if df_source.empty or "id" not in df_source.columns:
@@ -218,7 +222,10 @@ class CGmail(CMedia):
         )
         return {"gmailMessageDetailsResult": df_result}
 
-    def _get_message_details(self, message_id: str) -> Dict[str, Any]:
+    def _get_message_details(
+        self, 
+        message_id: str
+        ) -> Dict[str, Any]:
         """Récupère le détail complet d'un message donné via son identifiant."""
         if not self.gmail_api_service:
             return {}

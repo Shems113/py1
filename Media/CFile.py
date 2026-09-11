@@ -20,7 +20,9 @@ from Media.CMedia import CMedia
 
 class CFile(CMedia):
     def __init__(
-        self, json_path: Union[str, Path], action_type: EActionType
+        self, 
+        json_path: Union[str, Path],
+        action_type: EActionType
     ) -> None:
         super().__init__(json_path, EMediaType.File, action_type)
 
@@ -37,7 +39,8 @@ class CFile(CMedia):
         self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
 
     def _get_file_attributes_fields(
-        self, file_path: Union[str, Path]
+        self, 
+        file_path: Union[str, Path]
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Récupère les métadonnées de base du fichier et le déplace/copie si configuré."""
         path_obj = Path(file_path)
@@ -135,7 +138,9 @@ class CFile(CMedia):
         data_frame_to_csv(df, self.source_path, self.data_separator, self.fieldsByCodec.get("file"))
 
     def _edit_audio_fields(
-        self, file_path: Union[str, Path], fields: Dict[str, Any]
+        self, 
+        file_path: Union[str, Path],
+        fields: Dict[str, Any]
     ) -> bool:
         """Modifie les étiquettes si le fichier s'avère être du contenu multimédia (Audio/Vidéo)."""
         path_obj = Path(file_path)

@@ -30,7 +30,11 @@ def win32_required(func: Callable) -> Callable:
 
 
 class CWord(CMedia):
-    def __init__(self, json_path: Union[str, Path], action_type: EActionType) -> None:
+    def __init__(
+        self, 
+        json_path: Union[str, Path],
+        action_type: EActionType
+        ) -> None:
         super().__init__(json_path, EMediaType.Word, action_type)
         self.word = None
         if IS_WINDOWS and win32:
@@ -68,7 +72,10 @@ class CWord(CMedia):
         self._word_action("Write bookmarks of ", actions, file_format=17)
 
     def _word_action(
-        self, label_prefix: str, document_actions: List[Callable[[Any], Any]], file_format: Optional[int] = None
+        self, 
+        label_prefix: str, 
+        document_actions: List[Callable[[Any], Any]],
+        file_format: Optional[int] = None
     ) -> None:
         for file_path in self.get_source_files():
             self.logger.logElapsedTime(
@@ -77,7 +84,10 @@ class CWord(CMedia):
             )
 
     def _execute_on_document(
-        self, word_path: str, actions: List[Callable[[Any], Any]], file_format: Optional[int]
+        self, 
+        word_path: str,
+        actions: List[Callable[[Any], Any]],
+        file_format: Optional[int]
     ) -> List[Any]:
         doc = self.word.Documents.Open(word_path)
         try:
@@ -108,7 +118,11 @@ class CWord(CMedia):
                 self.logger.log(f"Not found text for bookmark {r.name} with value {r.value}")
         return "AddBookmarks"
 
-    def _find_range(self, doc: Any, text: str) -> Optional[Any]:
+    def _find_range(
+        self, 
+        doc: Any, 
+        text: str
+        ) -> Optional[Any]:
         rng = doc.Range()
         return rng if rng.Find.Execute(Text=text) else None
 

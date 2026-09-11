@@ -22,7 +22,9 @@ from Media.CMedia import CMedia
 
 class CMusic(CMedia):
     def __init__(
-        self, json_path: Union[str, Path], action_type: EActionType
+        self, 
+        json_path: Union[str, Path],
+        action_type: EActionType
     ) -> None:
         super().__init__(json_path, EMediaType.Music, action_type)
 
@@ -39,13 +41,19 @@ class CMusic(CMedia):
         self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
         self.remove_empty_folders()
 
-    def _build_dataframes(self, data: Dict[str, List[Dict[str, Any]]]) -> Dict[str, pd.DataFrame]:
+    def _build_dataframes(
+        self, 
+        data: Dict[str, List[Dict[str, Any]]]
+        ) -> Dict[str, pd.DataFrame]:
             # Normalisation Pandas & construction des DataFrames (raw et agrégé)
             raw_results: Dict[str, pd.DataFrame] = self.build_dataframes_by_codec(data)
             agg_results: Dict[str, pd.DataFrame] = self.build_dataframes_by_codec(self._build_aggregated(raw_results), log_message="Aggregated ")
             return raw_results | {f"{codec_type}Agg": df for codec_type, df in agg_results.items()}
         
-    def _build_aggregated(self,data: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
+    def _build_aggregated(
+        self,
+        data: Dict[str, pd.DataFrame]
+        ) -> Dict[str, pd.DataFrame]:
         aggregated = {}
         for codec, df in data.items():
             if df.empty:
@@ -75,7 +83,8 @@ class CMusic(CMedia):
 
     
     def _get_music_attributes_fields(
-        self, file_path: Union[str, Path]
+        self, 
+        file_path: Union[str, Path]
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Extrait les tags et déplace/copie le fichier si configuré."""
         path_obj = Path(file_path)
@@ -201,7 +210,9 @@ class CMusic(CMedia):
         data_frame_to_csv(df, self.source_path, self.data_separator)
 
     def _edit_audio_fields(
-        self, file_path: Union[str, Path], fields: Dict[str, Any]
+        self, 
+        file_path: Union[str, Path], 
+        fields: Dict[str, Any]
     ) -> bool:
         """Modifie les champs ID3 d'un fichier audio spécifique."""
         path_obj = Path(file_path)

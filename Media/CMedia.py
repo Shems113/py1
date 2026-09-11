@@ -10,7 +10,10 @@ from Common.CLogger import CLogger as Logger
 
 class CMedia:
     def __init__(
-        self, json_path: Union[str, Path], media_type: Any, action_type: Any
+        self, 
+        json_path: Union[str, Path],
+        media_type: Any, 
+        action_type: Any
     ) -> None:
         self.media_type = media_type
         self.action_type = action_type
@@ -49,7 +52,10 @@ class CMedia:
         self.max_worker = 5
         self.logger = Logger(self.log_paths)
 
-    def _resolve_path(self, raw_path: Union[str, Path, None]) -> Path:
+    def _resolve_path(
+        self, 
+        raw_path: Union[str, Path, None]
+        ) -> Path:
         """Résout un chemin de manière générique : absolu s'il l'est, sinon relatif à la racine du projet."""
         if not raw_path:
             return self.project_root
@@ -60,7 +66,10 @@ class CMedia:
         
         return self.project_root / path_obj
 
-    def _load_item(self, json_path: Path) -> dict[str, Any]:
+    def _load_item(
+        self, 
+        json_path: Path
+        ) -> dict[str, Any]:
         """Extrait l'élément de configuration correspondant au MediaType et à l'Action."""
         media_name = self.media_type.name
         action_name = self.action_type.name
@@ -123,7 +132,8 @@ class CMedia:
         Utils.remove_empty_folders(self.source_path)
 
     def process_files_parallel(
-        self, extract_func: Callable[[str], dict[str, list[dict[str, Any]]]]
+        self, 
+        extract_func: Callable[[str], dict[str, list[dict[str, Any]]]]
     ) -> dict[str, list[dict[str, Any]]]:
         """Exécute l'extraction d'attributs de fichiers en parallèle et accumule les résultats."""
         data: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -151,7 +161,9 @@ class CMedia:
         return data
 
     def build_dataframes_by_codec(
-        self, data: Dict[str, List[Dict[str, Any]]], log_message: str=""
+        self, 
+        data: Dict[str, List[Dict[str, Any]]], 
+        log_message: str=""
     ) -> Dict[str, pd.DataFrame]:
         """Extrait les attributs des fichiers et construit le DataFrame de données."""
 
@@ -166,7 +178,9 @@ class CMedia:
         )
 
     def export_dataframes_to_csv_by_codec(
-        self, dicoOfDataframes: Dict[str, pd.DataFrame], isOtherSource: bool=False
+        self, 
+        dicoOfDataframes: Dict[str, pd.DataFrame],
+        isOtherSource: bool=False
     ) -> None:
         """Méthode factorisée pour exporter un dictionnaire de DataFrames en CSV."""
         if not self.target_path:

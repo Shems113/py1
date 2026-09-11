@@ -51,7 +51,10 @@ class CSubtitle(CMedia):
             for file_path, srt_list in df.groupby("file_path")["srt_path"].apply(list).to_dict().items()
         }
 
-    def _transcribe_video_audio_file(self, file_path: Union[str, Path]) -> Dict[str, List[Dict[str, Any]]]:
+    def _transcribe_video_audio_file(
+        self, 
+        file_path: Union[str, Path]
+        ) -> Dict[str, List[Dict[str, Any]]]:
         """Transcribes an individual video or audio file, generates its .srt file, and extracts attributes."""
         path_obj = Path(file_path)
         segmentData: List[Dict[str, Any]] = []
@@ -85,7 +88,8 @@ class CSubtitle(CMedia):
         return result
 
     def _check_cross_lingual_synchronization(
-        self, file_path: Path
+        self, 
+        file_path: Path
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Checks synchronization between a foreign language video and French SRT files
