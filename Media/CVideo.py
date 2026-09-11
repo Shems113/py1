@@ -16,6 +16,7 @@ from Common.CUtils import (
 )
 from Common.EEnums import EActionType, EMediaType
 from Media.CMedia import CMedia
+from Common.CWhisperModel import CWhisperModel
 
 class CVideo(CMedia):
     def __init__(
@@ -25,16 +26,18 @@ class CVideo(CMedia):
         media_type: EMediaType = EMediaType.Video
     ) -> None:
         super().__init__(json_path, media_type, action_type)
-        ensure_ffmpeg_available()
+        self.mapping_video_audio_files: Dict[Path, List[Path]] = {}
 
     def read(self) -> None:
         """Lit les flux et métadonnées vidéo et les exporte sous forme de fichiers CSV."""
+        ensure_ffmpeg_available()
         data = self.process_files_parallel(self._get_video_attributes_fields)
         dfs = self.build_dataframes_by_codec(data)
         self.export_dataframes_to_csv_by_codec(dfs)
 
     def _get_video_attributes_fields(
-        self, file_path: Union[str, Path]
+        self, 
+        file_path: Union[str, Path]
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Extrait les flux, chapitres et métadonnées d'un fichier vidéo/texte."""
         path_obj = Path(file_path)
@@ -109,7 +112,9 @@ class CVideo(CMedia):
         data_frame_to_csv(df, self.source_path, self.data_separator, self.fieldsByCodec.get("video"))
 
     def _edit_audio_fields(
-        self, file_path: Union[str, Path], fields: Dict[str, Any]
+        self, 
+        file_path: Union[str, Path], 
+        fields: Dict[str, Any]
     ) -> bool:
         """Met à jour les étiquettes (tags) d'un fichier média audio ou vidéo."""
         path_obj = Path(file_path)
@@ -142,4 +147,91 @@ class CVideo(CMedia):
             )
             return False
     
+    def transcribe(self) -> None:
+        """Runs parallel audio transcription and synchronization"""
+        self.mapping_video_audio_files = self.get_mapping_video_audio_files()
+        data = self.process_files_parallel(self.generate_audio_synchronization_map)
+        dfs = self.build_dataframes_by_codec(data, log_message="Audio synchronization map generated for ")
+        self.export_dataframes_to_csv_by_codec(dfs)
+            
+    def get_mapping_video_audio_files(self) -> Dict[Path, List[Path]]:
+        """Returns the mapping of video files to their corresponding audio files."""
+        df = data_frame_from_csv(self.other_source_path, self.data_separator)
+        
+        return {
+            Path(file_path).resolve(): Path(audio_path).resolve()
+            for file_path, audio_path in zip(df["file_path"], df["audio_path"])
+        }
+              
+    def generate_audio_synchronization_map(
+        self, 
+        file_path: Path
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Génère la carte de correspondance entre les blocs HD et SD."""
+        path_obj = Path(file_path).resolve()
+        audio_path_obj = self.mapping_video_audio_files.get(path_obj)
+        segment_data: List[Dict[str, Any]] = []
+        audio_segment_data: List[Dict[str, Any]] = []
+        result: Dict[str, List[Dict[str, Any]]] = {}
+        
+        if not audio_path_obj:
+            self.logger.logError(f"No corresponding audio file found for {path_obj.name}. Skipping synchronization check.")
+            return result
+                
+        model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3-turbo")
+
+        segment_data, audio_segment_data = [
+            self.logger.logElapsedTime(
+                lambda : model.get_file_transcription_data(
+                    p,
+                    beam_size=1,
+                    voice_activity_detection_parameters=dict(min_silence_duration_ms=500)
+                    ),
+                f"Processing {p.name} to get transcription data...")
+                for p in (path_obj, audio_path_obj)
+            ]
+        
+        self.logger.log(f"Transcription result : Video -> {len(segment_data)} blocs | Audio -> {len(audio_segment_data)} blocs.")
+        alignment_map = []
+        min_len = min(len(segment_data), len(audio_segment_data))
     
+        for i in range(min_len):
+            video = segment_data[i]
+            audio = audio_segment_data[i]
+        
+            # Timestamps respectifs pour la coupe audio SD et le calage HD
+            video_start, video_end = round(video["start"], 2), round(video["end"], 2)
+            audio_start, audio_end = round(audio["start"], 2), round(audio["end"], 2)
+            
+            # Calcul du ratio de vitesse pour ce bloc spécifique si les durées divergent
+            video_duration = video_end - video_start
+            audio_duration = audio_end - audio_start
+            
+            duration_ratio = video_duration / audio_duration if audio_duration > 0 else 1.0
+            # On bride le ratio atempo entre 0.5 et 2.0 pour éviter les aberrations de décodage audio
+            duration_ratio = max(0.5, min(2.0, duration_ratio))
+            atempo = round(duration_ratio, 3)
+            filter_cmd = f"atempo={atempo}" if abs(atempo - 1.0) > 0.05 else "anull"  # Pas de modif si très proche
+            
+            ffmpeg_command = [
+                "ffmpeg", "-y",
+                "-ss", str(audio_start),
+                "-to", str(audio_end),
+                "-i", str(audio_path_obj),
+                "-af", filter_cmd,
+                "-c:a", "aac", "-b:a", "192k",
+                str(self.target_path / f"chunk_{i:04d}.m4a")
+            ]
+        
+            alignment_map.append({
+                "index": i,
+                "video_start": video_start,
+                "video_end": video_end,
+                "audio_start": audio_start,
+                "audio_end": audio_end,
+                "atempo": atempo,
+                "ffmpeg_command": " ".join(ffmpeg_command)
+            })
+        
+        result = {"audioSynchronization": alignment_map}
+        return result

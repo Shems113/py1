@@ -76,6 +76,16 @@
       }
     },
     {
+      "Action": "Transcribe",
+      "RootSourcePath": "/workspace/video/",
+      "LogRootSourcePath": "/workspace/logs/",
+      "ExtraFileRootSourcePath": "/workspace/video/audioMapping.csv",
+      "RootTargetPath": "/workspace/video/result/",
+      "FilePatterns": [
+        "*.mp4"
+      ]
+    },
+    {
       "Action": "Write",
       "RootSourcePath": "/workspace/video/result/videoInput.csv",
       "LogRootSourcePath": "/workspace/logs/"

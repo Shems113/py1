@@ -143,7 +143,6 @@ class CSubtitle(CMedia):
                 all_reports.append({
                     "file_path": str(file_path_obj),
                     "srt_path": str(srt_path_obj),
-                    "codec_type": "subtitle",
                     "subtitle_index": sub.index,
                     "subtitle_start": sub_start,
                     "speech_start_detected": closest_speech["start"],

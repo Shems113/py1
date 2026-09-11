@@ -12,8 +12,8 @@ from Media.CVideo import CVideo as Video
 from Media.CWord import CWord as Word
 
 # Valeurs par défaut
-DEFAULT_MEDIA = EMediaType.Subtitle
-DEFAULT_ACTION = EActionType.TranscribeAndCheck
+DEFAULT_MEDIA = EMediaType.Video
+DEFAULT_ACTION = EActionType.Transcribe
 
 # Mappings des classes de médias et des actions associées
 MEDIA_MAPPING: Dict[EMediaType, Type] = {
