@@ -76,8 +76,7 @@ class CSubtitle(CMedia):
                     end_str = format_timestamp(segment["end"])
                     f.write(f"{i}\n{start_str} --> {end_str}\n{segment['text'].strip()}\n\n")
             
-            result = self._get_subtitle_attributes_fields(srt_path)
-            result = result | {"subtitleMapping": [{"file_path": str(path_obj), "srt_path": str(srt_path)}]}
+            result = {"subtitleMapping": [{"file_path": str(path_obj), "srt_path": str(srt_path)}]}
             self.logger.log(f"Transcription successful: {path_obj.name} -> Saved to {srt_path.name}")
             
         except Exception as ex:
