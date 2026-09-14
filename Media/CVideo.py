@@ -8,8 +8,7 @@ from Common.CUtils import (
     get_audio_tags,
     get_file_common_fields,
     ensure_ffmpeg_available,
-    get_video_chapters,
-    get_video_streams,
+    get_video_streams_and_chapters,
     is_audio,
     is_text_file,
     is_video
@@ -48,8 +47,7 @@ class CVideo(CMedia):
             return result
 
         try:
-            streams = get_video_streams(path_obj)
-            chapters = get_video_chapters(path_obj)
+            streams, chapters = get_video_streams_and_chapters(path_obj)
             common_fields = get_file_common_fields(path_obj)
 
             # Regroupement des flux par type de codec (video, audio, subtitle, etc.)

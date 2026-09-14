@@ -49,7 +49,7 @@ class CMedia:
         if self.target_path and not self.target_path.suffix:
             self.target_path.mkdir(parents=True, exist_ok=True)
 
-        self.max_worker = 5
+        self.max_worker = 10
         self.logger = Logger(self.log_paths)
 
     def _resolve_path(

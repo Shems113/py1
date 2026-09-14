@@ -135,14 +135,14 @@ def add_audio_id3_images(
     audio.save()
 
 
-def get_video_streams(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
-    """Récupère les flux vidéo/audio via ffmpeg_probe."""
-    return ffmpeg_probe(str(file_path)).get("streams", [])
-
-
-def get_video_chapters(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
-    """Récupère la liste des chapitres vidéo via ffmpeg_probe."""
-    return ffmpeg_probe(str(file_path), show_chapters=None).get("chapters", [])
+def get_video_streams_and_chapters(
+    file_path: Union[str, Path]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Récupère simultanément les flux vidéo/audio et les chapitres via un seul appel ffprobe."""
+    probe_data = ffmpeg_probe(str(file_path), show_chapters=None)
+    streams = probe_data.get("streams", [])
+    chapters = probe_data.get("chapters", [])
+    return streams, chapters
 
 
 def is_media_type(file_path: Union[str, Path], media_type: str) -> bool:

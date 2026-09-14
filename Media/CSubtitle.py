@@ -70,21 +70,25 @@ class CSubtitle(CMedia):
         target_dir = self.target_path
 
         try:
-            srt_path = target_dir / f"{path_obj.stem}.srt"
+            srt_obj_path = target_dir / f"{path_obj.stem}.srt"
+            
+            if srt_obj_path.exists():
+                self.logger.log(f"Subtitle file already exists: {srt_obj_path.name}. Skipping transcription.")
+                return result
             
             segmentData = self.logger.logElapsedTime(
                 lambda: self.whisper_model.get_file_transcription_data(path_obj),
                 f"Processing {path_obj.name} to get transcription data..."
             )
             
-            with open(srt_path, "w", encoding="utf-8") as f:
+            with open(srt_obj_path, "w", encoding="utf-8") as f:
                 for i, segment in enumerate(segmentData, start=1):
                     start_str = format_timestamp(segment["start"])
                     end_str = format_timestamp(segment["end"])
                     f.write(f"{i}\n{start_str} --> {end_str}\n{segment['text'].strip()}\n\n")
             
-            result = {"subtitleMapping": [{"file_path": str(path_obj), "srt_path": str(srt_path)}]}
-            self.logger.log(f"Transcription successful: {path_obj.name} -> Saved to {srt_path.name}")
+            result = {"subtitleMapping": [{"file_path": str(path_obj), "srt_path": str(srt_obj_path)}]}
+            self.logger.log(f"Transcription successful: {path_obj.name} -> Saved to {srt_obj_path.name}")
             
         except Exception as ex:
             self.logger.logError(f"Error transcribing {path_obj.name}: {ex}")
