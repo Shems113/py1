@@ -1,5 +1,4 @@
 from pathlib import Path
-import struct
 import sys
 from typing import Any, Dict, List, Union
 
@@ -185,27 +184,23 @@ class CVideo(CMedia):
             segment_data = self.logger.logElapsedTime(
                 lambda: self.whisper_model.get_file_transcription_data(
                     path_obj,
-                    # Décodage & Précision
                     beam_size=5,
                     patience=1.0,
                     best_of=5,
                     temperature=(0.0, 0.2, 0.4),
-                    # Stabilité (Empêche les répétitions en boucle lors des silences/musiques)
                     condition_on_previous_text=False,
-                    # Filtrage VAD (Découpe propre des dialogues & ajouts de marges aux mots)
                     voice_activity_detection_filter=True,
                     voice_activity_detection_parameters={
                         "threshold": 0.5,
                         "min_speech_duration_ms": 250,
-                        "max_speech_duration_s": 12.0,  # Utile pour éviter les sous-titres à rallonge
+                        "max_speech_duration_s": 12.0,
                         "min_silence_duration_ms": 500,
-                        "speech_pad_ms": 400,  # Marge de 400ms pour ne pas couper l'attaque des phrases
+                        "speech_pad_ms": 400,
                     },
-                    # Horodatage précis au niveau du mot (si supporté par ta méthode)
                     word_timestamps=True,
                 ),
-            f"Processing {path_obj.name} to get transcription data...",
-        )
+                f"Processing {path_obj.name} to get transcription data...",
+            )
 
             self.logger.log(
                 f"Transcription result of {path_obj.name} -> {len(segment_data)} blocs."
@@ -269,7 +264,23 @@ class CVideo(CMedia):
 
         # Inférence Whisper
         segment_data = self.logger.logElapsedTime(
-            lambda: self.whisper_model.get_file_transcription_data(audio),
+            lambda: self.whisper_model.get_file_transcription_data(
+                audio,
+                beam_size=5,
+                patience=1.0,
+                best_of=5,
+                temperature=(0.0, 0.2, 0.4),
+                condition_on_previous_text=False,
+                voice_activity_detection_filter=True,
+                voice_activity_detection_parameters={
+                    "threshold": 0.5,
+                    "min_speech_duration_ms": 250,
+                    "max_speech_duration_s": 12.0,
+                    "min_silence_duration_ms": 500,
+                    "speech_pad_ms": 400,
+                },
+                word_timestamps=True,
+            ),
             "Processing audio stream for transcription...",
         )
 

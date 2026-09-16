@@ -1,7 +1,6 @@
 import platform
 from pathlib import Path
 from typing import Optional, Tuple, Union, List, Dict, Any
-
 import numpy as np
 from faster_whisper import WhisperModel
 
@@ -54,47 +53,37 @@ class CWhisperModel:
             return None
 
     def get_file_transcription_data(
-        self, 
+        self,
         audio_input: Union[Path, str, np.ndarray],
         beam_size: int = 10,
         patience: float = 2.0,
         best_of: int = 10,
-        temperature: Union[float, List[float], Tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+        temperature: Union[float, List[float], Tuple[float, ...]] = (
+            0.0,
+            0.2,
+            0.4,
+            0.6,
+            0.8,
+            1.0,
+        ),
         condition_on_previous_text: bool = True,
         compression_ratio_threshold: float = 2.4,
         log_prob_threshold: float = -1.0,
         no_speech_threshold: float = 0.6,
         voice_activity_detection_filter: bool = True,
-        voice_activity_detection_parameters: Optional[dict] = None
+        voice_activity_detection_parameters: Optional[dict] = None,
+        word_timestamps: bool = True,
     ) -> List[Dict[str, Any]]:
-        """
-        Transcrit un fichier ou flux audio avec paramètres configurés pour une précision maximale.
-        """
+        """Génère les données de transcription à partir d'un fichier audio ou d'un flux numpy."""
+
+        model_instance = self.lazy_model.value
+        if model_instance is None:
+            self.logger.logError("WhisperModel is not initialized.")
+            return []
+
         try:
-            model = self.lazy_model.value
-            if not model:
-                self.logger.logError("Whisper model not initialized.")
-                return []
-        
-            if isinstance(audio_input, (Path, str)):
-                source_log = str(audio_input)
-                audio_target = str(audio_input)
-            elif isinstance(audio_input, np.ndarray):
-                source_log = "in-memory stream"
-                audio_target = audio_input
-            else:
-                self.logger.logError(f"Unsupported audio input type: {type(audio_input)}")
-                return []
-
-            # Paramètres VAD par défaut axés sur la précision
-            if voice_activity_detection_parameters is None:
-                voice_activity_detection_parameters = {
-                    "min_silence_duration_ms": 500,
-                    "speech_pad_ms": 200
-                }
-
-            segments, info = model.transcribe(
-                audio_target, 
+            segments, info = model_instance.transcribe(
+                audio_input,
                 beam_size=beam_size,
                 patience=patience,
                 best_of=best_of,
@@ -104,24 +93,45 @@ class CWhisperModel:
                 log_prob_threshold=log_prob_threshold,
                 no_speech_threshold=no_speech_threshold,
                 vad_filter=voice_activity_detection_filter,
-                vad_parameters=voice_activity_detection_parameters
+                vad_parameters=voice_activity_detection_parameters,
+                word_timestamps=word_timestamps,
             )
-        
+
+            # Identification du nom du fichier ou du flux pour le log
+            if isinstance(audio_input, (str, Path)):
+                source_log = Path(audio_input).name
+            else:
+                source_log = "stream: numpy array"
+
+            # Log de la langue auto-détectée
             self.logger.log(
                 f"Auto-detected language for {source_log}: '{info.language}' "
                 f"(confidence: {info.language_probability:.2f})"
             )
-        
-            return [
-                {
+
+            results = []
+            for segment in segments:
+                segment_dict = {
+                    "id": segment.id,
                     "start": segment.start,
                     "end": segment.end,
-                    "text": segment.text
+                    "text": segment.text,
+                    "words": [
+                        {
+                            "start": w.start,
+                            "end": w.end,
+                            "word": w.word,
+                            "probability": w.probability,
+                        }
+                        for w in (segment.words or [])
+                    ]
+                    if word_timestamps
+                    else [],
                 }
-                for segment in segments
-            ]
-    
-        except Exception as ex:
-            source_log = str(audio_input) if isinstance(audio_input, (Path, str)) else "in-memory stream"
-            self.logger.logError(f"Error transcribing {source_log}: {ex}")
+                results.append(segment_dict)
+
+            return results
+
+        except Exception as e:
+            self.logger.logError(f"Error during transcription process: {e}")
             return []
