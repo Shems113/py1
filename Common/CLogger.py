@@ -15,7 +15,7 @@ class CLogger:
         logger.remove()
         
         # 2. Handler console (sys.stderr) avec flush immédiat pour PowerShell
-        logger.add(sys.stderr, format=log_format, colorize=True, flush=True)
+        logger.add(sys.stderr, format=log_format, colorize=True)
         
         # 3. Handlers fichiers (réinitialisation et écriture asynchrone)
         for f in self.log_paths:
@@ -46,7 +46,7 @@ class CLogger:
         except Exception:
             self.log(f"Processed {index}/{total} : {file_path}")
 
-    def log_elapsed_time(self, func: Callable[[], Any], func_name: str) -> Any:
+    def logElapsedTime(self, func: Callable[[], Any], func_name: str) -> Any:
         """Mesure et log le temps d'exécution d'une fonction."""
         sep = "-------------------------------------------------------------------"
         self.log(sep)
