@@ -18,7 +18,7 @@ from Common.CUtils import (
     is_audio,
     is_text_file,
     is_video,
-    json_to_stdout
+    json_to_stdout,
 )
 from Common.CWhisperModel import CWhisperModel
 from Common.EEnums import EActionType, EMediaType
@@ -34,7 +34,9 @@ class CVideo(CMedia):
         media_type: EMediaType = EMediaType.Video,
     ) -> None:
         super().__init__(json_path, media_type, action_type, is_streaming)
-        self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3")
+        self.whisper_model = CWhisperModel(
+            logger=self.logger, model_size_or_path="large-v3"
+        )
 
     def read(self) -> None:
         """Lit les flux et métadonnées vidéo et les exporte sous forme de fichiers CSV."""
@@ -76,7 +78,9 @@ class CVideo(CMedia):
                 result["videoOther"] = [common_fields | audio_tags]
 
         except Exception as e:
-            self.logger.logError(f"Error with {path_obj} : failed to get fields ({e})")
+            self.logger.logError(
+                f"Error with {path_obj} : failed to get fields ({e})"
+            )
 
         return result
 
@@ -112,7 +116,10 @@ class CVideo(CMedia):
             df = df.drop(index=rows_to_drop)
 
         data_frame_to_csv(
-            df, self.source_path, self.data_separator, self.fieldsByCodec.get("video")
+            df,
+            self.source_path,
+            self.data_separator,
+            self.fieldsByCodec.get("video"),
         )
 
     def _edit_audio_fields(
@@ -144,7 +151,9 @@ class CVideo(CMedia):
             return True
 
         except Exception as e:
-            self.logger.logError(f"Error with {path_obj} : failed to edit tags ({e})")
+            self.logger.logError(
+                f"Error with {path_obj} : failed to edit tags ({e})"
+            )
             return False
 
     def transcribe(self) -> None:
@@ -181,7 +190,7 @@ class CVideo(CMedia):
             self.logger.log(
                 f"Transcription result of {path_obj.name} -> {len(segment_data)} blocs."
             )
-            
+
             audio_transcription = [
                 {
                     "path": str(path_obj),
@@ -204,29 +213,35 @@ class CVideo(CMedia):
         return result
 
     def transcribe_video_audio_stream(
-        self,
-        add_srt: bool = False
-        ) -> List[Dict[str, Any]]:
-        """Lit un flux audio PCM 16-bit 16kHz Mono depuis stdin et retourne sa transcription."""
+        self, 
+        add_srt: bool = False, 
+        chunk_size: int = 65536
+    ) -> List[Dict[str, Any]]:
+        """Lit un flux audio PCM 16-bit 16kHz Mono depuis stdin jusqu'à EOF et retourne sa transcription."""
         stream = sys.stdin.buffer
-        header = self._read_exact(stream, 8)
+        chunks = []
+        total_bytes = 0
 
-        # 1. Validation de l'en-tête du flux
-        if len(header) < 8:
-            self.logger.logError(
-                "Stream header missing or incomplete (expected 8 bytes for length prefix)."
-            )
-            return []
+        self.logger.log("Reading streaming audio from stdin until EOF...")
 
-        length = struct.unpack(">Q", header)[0]
-        data = self._read_exact(stream, length)
+        # 1. Lecture continue par chunks jusqu'à la fermeture du flux (EOF)
+        while True:
+            chunk = stream.read(chunk_size)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total_bytes += len(chunk)
+
+        raw_data = b"".join(chunks)
 
         # 2. Validation du payload PCM 16-bit brut
-        if not self._validate_raw_pcm_stream(data, expected_length=length):
+        if not self._validate_raw_pcm_stream(raw_data):
             return []
 
         # 3. Conversion PCM int16 -> float32 normalisé [-1.0, 1.0]
-        audio = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+        audio = (
+            np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
+        )
 
         # 4. Validation finale du tableau NumPy
         if not self._validate_audio_array(audio):
@@ -235,7 +250,7 @@ class CVideo(CMedia):
         # Inférence Whisper
         segment_data = self.logger.logElapsedTime(
             lambda: self.whisper_model.get_file_transcription_data(audio),
-            "Processing stdin stream for transcription...",
+            "Processing audio stream for transcription...",
         )
 
         if not segment_data:
@@ -256,16 +271,10 @@ class CVideo(CMedia):
         self.logger.log("Transcription successful for stdin stream")
         return audio_transcription
 
-    def _validate_raw_pcm_stream(self, raw_data: bytes, expected_length: int) -> bool:
+    def _validate_raw_pcm_stream(self, raw_data: bytes) -> bool:
         """Contrôle d'intégrité du buffer binaire PCM avant conversion."""
-        if len(raw_data) < expected_length:
-            self.logger.logError(
-                f"Incomplete payload: expected {expected_length} bytes, got {len(raw_data)} bytes."
-            )
-            return False
-
         if len(raw_data) == 0:
-            self.logger.logError("Stream payload is empty.")
+            self.logger.logError("Stream payload is empty (0 bytes received).")
             return False
 
         if len(raw_data) % 2 != 0:
@@ -279,11 +288,15 @@ class CVideo(CMedia):
     def _validate_audio_array(self, audio: np.ndarray) -> bool:
         """Validation stricte des dimensions et du format du tableau NumPy converti."""
         if audio.dtype != np.float32:
-            self.logger.logError(f"Invalid audio dtype: expected float32, got {audio.dtype}")
+            self.logger.logError(
+                f"Invalid audio dtype: expected float32, got {audio.dtype}"
+            )
             return False
 
         if audio.ndim != 1:
-            self.logger.logError(f"Invalid audio layout: expected 1D (mono), got shape {audio.shape}")
+            self.logger.logError(
+                f"Invalid audio layout: expected 1D (mono), got shape {audio.shape}"
+            )
             return False
 
         if audio.size == 0:
@@ -292,35 +305,33 @@ class CVideo(CMedia):
 
         return True
 
-    def _read_exact(self, stream: Any, n_bytes: int) -> bytes:
-        """Lit exactement n_bytes depuis un flux binaire."""
-        buffer = bytearray()
-        while len(buffer) < n_bytes:
-            chunk = stream.read(n_bytes - len(buffer))
-            if not chunk:
-                break
-            buffer.extend(chunk)
-        return bytes(buffer)
-    
-    def _get_data(
-        self, 
-        data_type: int,
-        i: int,
-        seg: Dict[str, Any]
-        ) -> str:
+    def _get_data(self, data_type: int, i: int, seg: Dict[str, Any]) -> str:
         self.logger.log(f"Get data of the segment {i} : {seg}")
-        
+
         if data_type == 0:
             start = seg["start"]
             end = seg["end"]
             text = seg["text"]
             return f"{i + 1}\n{format_timestamp(start)} --> {format_timestamp(end)}\n{text.strip()}\n\n"
-        
+
         if data_type == 1:
             ffmpeg_cmd = [
-                "ffmpeg", "-y","-ss", "@audio_start","-to", "@audio_end","-i", "@audio_path","-af", "@atempo_or_anull","-c:a", "aac", "-b:a", "192k",
-                str(Path(self.target_path) / f"chunk_{i:04d}.m4a")
-                ]
+                "ffmpeg",
+                "-y",
+                "-ss",
+                "@audio_start",
+                "-to",
+                "@audio_end",
+                "-i",
+                "@audio_path",
+                "-af",
+                "@atempo_or_anull",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                str(Path(self.target_path) / f"chunk_{i:04d}.m4a"),
+            ]
             return " ".join(ffmpeg_cmd)
-        
+
         return seg["text"]
