@@ -15,6 +15,7 @@ class CMedia:
         media_type: Any, 
         action_type: Any
     ) -> None:
+        self.json_path = json_path
         self.media_type = media_type
         self.action_type = action_type
         self.data_separator: str = ";"
@@ -23,7 +24,7 @@ class CMedia:
         self.project_root: Path = Path(__file__).resolve().parent
 
         # Chargement de la configuration
-        self.item: dict[str, Any] = self._load_item(Path(json_path))
+        self.item: dict[str, Any] = self._load_item(Path(self.json_path))
 
         # Résolution universelle et générique des chemins
         self.source_path: Path = self._resolve_path(self.item.get("RootSourcePath"))
