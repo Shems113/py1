@@ -22,9 +22,10 @@ class CFile(CMedia):
     def __init__(
         self, 
         json_path: Union[str, Path],
-        action_type: EActionType
+        action_type: EActionType,
+        is_streaming: bool
     ) -> None:
-        super().__init__(json_path, EMediaType.File, action_type)
+        super().__init__(json_path, EMediaType.File, action_type, is_streaming)
 
     def read(self) -> None:
         """Lit les fichiers génériques et exporte l'analyse sous forme de fichier CSV."""

@@ -24,9 +24,10 @@ class CMusic(CMedia):
     def __init__(
         self, 
         json_path: Union[str, Path],
-        action_type: EActionType
+        action_type: EActionType,
+        is_streaming: bool
     ) -> None:
-        super().__init__(json_path, EMediaType.Music, action_type)
+        super().__init__(json_path, EMediaType.Music, action_type, is_streaming)
 
     def read(self) -> None:
         """Lit les fichiers audio sources et exporte les analyses en CSV."""

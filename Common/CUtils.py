@@ -337,7 +337,11 @@ def json_to_file(file_path: Union[str, Path], data: Dict[str, Any]) -> None:
     with open(target_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-
+def json_to_stdout(data: List[Dict[str, Any]]) -> None:
+    """Écrit un dictionnaire dans stdout en JSON"""
+    json_bytes = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
+    sys.stdout.buffer.write(json_bytes)
+    sys.stdout.buffer.flush()
 # --- Pandas & Data Processing ---
 
 

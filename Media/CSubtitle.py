@@ -5,11 +5,9 @@ import pysrt
 import pandas as pd
 
 from Common.CUtils import (
-    is_audio,
-    is_video,
-    format_timestamp,
     time_to_seconds,
-    data_frame_from_csv
+    data_frame_from_csv,
+    json_to_stdout
 )
 from Common.EEnums import EActionType, EMediaType
 from Common.CWhisperModel import CWhisperModel
@@ -20,10 +18,12 @@ class CSubtitle(CMedia):
     def __init__(
         self,
         json_path: Union[str, Path],
-        action_type: EActionType
+        action_type: EActionType,
+        is_streaming: bool
     ) -> None:
-        super().__init__(json_path, EMediaType.Subtitle, action_type)
-        self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3-turbo")
+        super().__init__(json_path, EMediaType.Subtitle, action_type, is_streaming)
+        self.video = CVideo(self.json_path, self.action_type, is_streaming , EMediaType.Subtitle)
+        self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3")
         is_transcribe_action = action_type in [EActionType.Transcribe, EActionType.TranscribeAndCheck]
         self.max_worker = (4 if (platform.system() == "Windows") and is_transcribe_action else 1)
         self.mapping_video_srt_files: Dict[Path, List[Path]] = {}
@@ -31,14 +31,18 @@ class CSubtitle(CMedia):
         
     def read(self) -> None:
         """Reads video/audio streams and metadata, exporting them as CSV files."""
-        CVideo(self.json_path, self.action_type, EMediaType.Subtitle).read()
-    
+        self.video.read()
+     
     def transcribe(self) -> None:
         """Runs parallel transcription of targeted videos, generates .srt files, and exports metadata DataFrames to CSV."""
-        data = self.process_files_parallel(self._transcribe_video_audio_file)
-        dfs = self.build_dataframes_by_codec(data, log_message="Transcribed ")
-        self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
-            
+        if self.is_streaming:
+            data = self.video.transcribe_video_audio_stream(add_srt=True)
+            json_to_stdout(data)
+        else:
+            data = self.process_files_parallel(self._transcribe_video_audio_file_in_subtitle)
+            dfs = self.build_dataframes_by_codec(data, log_message="Transcribed ")
+            self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
+                      
     def transcribeAndCheck(self) -> None:
         """Runs parallel transcription and checks synchronization of generated .srt files against existing ones."""
         self.mapping_video_srt_files = self.get_mapping_video_srt_files()
@@ -55,37 +59,24 @@ class CSubtitle(CMedia):
             for file_path, srt_list in df.groupby("file_path")["srt_path"].apply(list).to_dict().items()
         }
 
-    def _transcribe_video_audio_file(
+    def _transcribe_video_audio_file_in_subtitle(
         self, 
         file_path: Union[str, Path]
         ) -> Dict[str, List[Dict[str, Any]]]:
         """Transcribes an individual video or audio file, generates its .srt file, and extracts attributes."""
         path_obj = Path(file_path)
-        segmentData: List[Dict[str, Any]] = []
         result: Dict[str, List[Dict[str, Any]]] = {}
 
-        if not (is_video(path_obj) or is_audio(path_obj)):
-            return result
-        
-        target_dir = self.target_path
-
         try:
-            srt_obj_path = target_dir / f"{path_obj.stem}.srt"
+            srt_obj_path = self.target_path / f"{path_obj.stem}.srt"
             
             if srt_obj_path.exists():
                 self.logger.log(f"Subtitle file already exists: {srt_obj_path.name}. Skipping transcription.")
                 return result
             
-            segmentData = self.logger.logElapsedTime(
-                lambda: self.whisper_model.get_file_transcription_data(path_obj),
-                f"Processing {path_obj.name} to get transcription data..."
-            )
-            
             with open(srt_obj_path, "w", encoding="utf-8") as f:
-                for i, segment in enumerate(segmentData, start=1):
-                    start_str = format_timestamp(segment["start"])
-                    end_str = format_timestamp(segment["end"])
-                    f.write(f"{i}\n{start_str} --> {end_str}\n{segment['text'].strip()}\n\n")
+                for segment in self.video.transcribe_video_audio_file(path_obj,True).get("audioTranscription",[]):
+                    f.write(segment["data"])
             
             result = {"subtitleMapping": [{"file_path": str(path_obj), "srt_path": str(srt_obj_path)}]}
             self.logger.log(f"Transcription successful: {path_obj.name} -> Saved to {srt_obj_path.name}")

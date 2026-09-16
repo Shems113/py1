@@ -1,50 +1,51 @@
 # Encodage de la console en UTF-8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding           = [System.Text.Encoding]::UTF8
 
 # Apparence de la console
 $Host.UI.RawUI.BackgroundColor = "White"
 $Host.UI.RawUI.ForegroundColor = "DarkGreen"
 Clear-Host
 
-# --- Section Python ---
-# Variables de chemins et paramètres
-$globalEnv  = "D:\Projets\Python\global-env"
-$pyExe      = "$globalEnv\Scripts\python.exe"
+# --- Configuration & Variables ---
+$globalEnv   = "D:\Projets\Python\global-env"
+$pyExe       = "$globalEnv\Scripts\python.exe"
+$pyPath      = "D:\Projets\Python\repos\py1\Main.py"
+$isStreaming = $true
 
-$pyPath     = "D:\Projets\Python\repos\py1\Main.py"
-$pyVPath    = "D:\Projets\Python\repos\py1\CVideoApp.py"
+# Arguments transmis au script Python Main.py
+$pythonCommonArgs = @(
+    "--mediaType", "Video",
+    "--actionType", "Transcribe",
+    "--isStreaming", "$isStreaming"
+)
 
-$mediaTypes = @("File", "Music", "Subtitle", "Video")
-$mediaType = @("Video")
-$actionType = "Read"
+# --- Exécution ---
+if ($isStreaming) {
+    $streamingScript = "C:\Users\SEDOUD\Desktop\PowerShell\windows_streaming_audio.ps1"
+    $inputFile       = "C:\Users\SEDOUD\Videos\New\Windows\video\La norme d'un vecteur.mp4"
+    $outputJson      = "D:\Result\Video\La norme d'un vecteur.json"
 
-# Assurez-vous que vos variables de chemin ($pyExe, $pyPath) sont définies avant.
-# $mediaTypes | ForEach-Object -Parallel {
-    # $mediaType = $_
-    # $actionType = $using:actionType
-    # $pyExe = $using:pyExe
-    # $pyPath = $using:pyPath
+    # Utilisation des paramètres génériques :
+    # -ExecutorExe   : le binaire local (python.exe)
+    # -ExecutorFlags : le flag d'optimisation (-OO) placé AVANT le script .py
+    # -ScriptPath    : le chemin du script Main.py
+    # -AppArgs       : la liste des arguments transmis à Main.py
+	
+    & $streamingScript -InputFile $inputFile -OutputFile $outputJson -ExecutorExe $pyExe -ExecutorFlags "-OO" -ScriptPath $pyPath -AppArgs $pythonCommonArgs
+} else {
+    uv run --python $globalEnv -OO $pyPath @pythonCommonArgs
+}
 
-    # Write-Host "Démarrage pour : $mediaType"
-    
-    # Exécution de la commande
-    # uv run --python $pyExe python -OO $pyPath --mediaType $mediaType --actionType $actionType
-    
-    # Write-Host "Terminé pour : $mediaType"
-# } -ThrottleLimit 4 # Exécute les 4 en même temps (ajustez selon vos besoins)
-
- uv run --python $pyExe python -OO $pyPath --mediaType $mediaType --actionType $actionType
- 
 # 2. Exécution de l'application vidéo seule (CVideoApp.py)
-# uv run --python $pyExe python -OO $pyVPath
+# uv run --python $globalEnv -OO $pyVPath
 
 # --- Section .NET ---
 # Publication et exécution si la publication réussit 
-# $slnPath    = "D:\Projets\PokerNet\PokerNet.slnx"
+# $slnPath        = "D:\Projets\PokerNet\PokerNet.slnx"
 # $publicationPath    = "D:\Projets\PokerNet\PokerOnWeb\bin\Release\net10.0\publish"
-# $exePath   = "D:\Projets\PokerNet\PokerOnWeb\bin\Release\net10.0\publish\PokerOnWeb.exe"
-# $pyPath    = "D:\Projets\Python\repos\PokerPy\Poker.py"
+# $exePath       = "D:\Projets\PokerNet\PokerOnWeb\bin\Release\net10.0\publish\PokerOnWeb.exe"
+# $pyPath        = "D:\Projets\Python\repos\PokerPy\Poker.py"
 
 # $Host.UI.RawUI.WindowTitle = "Poker calculations"
 # 1. On compile (on ne met pas les URLs ici, publish ne lance pas l'app)
@@ -70,7 +71,6 @@ $actionType = "Read"
 # C:\Windows\System32\robocopy.exe "E:\Video\FR\Fernandel" "F:\" *.mp4 *.srt /J /E /REG
 # C:\Windows\System32\robocopy.exe "E:\Video\FR\Dieudonne" "F:\" *.mp4 *.srt /J /E /REG
 # C:\Windows\System32\robocopy.exe "E:\Video\FR\Other" "F:\" *.mp4 *.srt /J /E /REG
-
 
 # Équivalent du pause 
 Read-Host "`nAppuyez sur Entrée pour continuer..."

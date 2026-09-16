@@ -12,8 +12,8 @@ from Media.CVideo import CVideo as Video
 from Media.CWord import CWord as Word
 
 # Valeurs par défaut
-DEFAULT_MEDIA = EMediaType.Video
-DEFAULT_ACTION = EActionType.Transcribe
+DEFAULT_MEDIA = EMediaType.Subtitle
+DEFAULT_ACTION = EActionType.Read
 
 # Mappings des classes de médias et des actions associées
 MEDIA_MAPPING: Dict[EMediaType, Type] = {
@@ -66,6 +66,12 @@ def main() -> None:
         help="Type of action",
         default=DEFAULT_ACTION.name,
     )
+    parser.add_argument(
+        "--isStreaming",
+        type=bool,
+        help="Flag indicating if the data source is streamed",
+        default=False
+    )
 
     args = parser.parse_args()
 
@@ -75,7 +81,7 @@ def main() -> None:
 
     # Instanciation et exécution
     media_class = MEDIA_MAPPING[media_type]
-    media_instance = media_class(Path(args.jsonPath), action_type)
+    media_instance = media_class(Path(args.jsonPath), action_type, bool(args.isStreaming))
     action_name = ACTION_MAPPING[action_type]
     process(media_instance, action_name)
 

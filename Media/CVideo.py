@@ -1,31 +1,40 @@
 from pathlib import Path
-from typing import Union, Dict, Any, List
+import struct
+import sys
+from typing import Any, Dict, List, Union
+
+import numpy as np
 import pandas as pd
+
 from Common.CUtils import (
     data_frame_from_csv,
     data_frame_to_csv,
+    ensure_ffmpeg_available,
+    format_timestamp,
     get_audio_id3_tags,
     get_audio_tags,
     get_file_common_fields,
-    ensure_ffmpeg_available,
     get_video_streams_and_chapters,
     is_audio,
     is_text_file,
-    is_video
+    is_video,
+    json_to_stdout
 )
+from Common.CWhisperModel import CWhisperModel
 from Common.EEnums import EActionType, EMediaType
 from Media.CMedia import CMedia
-from Common.CWhisperModel import CWhisperModel
+
 
 class CVideo(CMedia):
     def __init__(
-        self, 
-        json_path: Union[str, Path], 
-        action_type: EActionType , 
-        media_type: EMediaType = EMediaType.Video
+        self,
+        json_path: Union[str, Path],
+        action_type: EActionType,
+        is_streaming: bool,
+        media_type: EMediaType = EMediaType.Video,
     ) -> None:
-        super().__init__(json_path, media_type, action_type)
-        self.mapping_video_audio_files: Dict[Path, List[Path]] = {}
+        super().__init__(json_path, media_type, action_type, is_streaming)
+        self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3")
 
     def read(self) -> None:
         """Lit les flux et métadonnées vidéo et les exporte sous forme de fichiers CSV."""
@@ -35,8 +44,7 @@ class CVideo(CMedia):
         self.export_dataframes_to_csv_by_codec(dfs)
 
     def _get_video_attributes_fields(
-        self, 
-        file_path: Union[str, Path]
+        self, file_path: Union[str, Path]
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Extrait les flux, chapitres et métadonnées d'un fichier vidéo/texte."""
         path_obj = Path(file_path)
@@ -54,9 +62,7 @@ class CVideo(CMedia):
             for stream in streams:
                 codec_type = stream.get("codec_type")
                 if codec_type:
-                    result.setdefault(codec_type, []).append(
-                        common_fields | stream
-                    )
+                    result.setdefault(codec_type, []).append(common_fields | stream)
 
             # Traitement des chapitres
             if chapters:
@@ -70,9 +76,7 @@ class CVideo(CMedia):
                 result["videoOther"] = [common_fields | audio_tags]
 
         except Exception as e:
-            self.logger.logError(
-                f"Error with {path_obj} : failed to get fields ({e})"
-            )
+            self.logger.logError(f"Error with {path_obj} : failed to get fields ({e})")
 
         return result
 
@@ -107,12 +111,12 @@ class CVideo(CMedia):
         if rows_to_drop:
             df = df.drop(index=rows_to_drop)
 
-        data_frame_to_csv(df, self.source_path, self.data_separator, self.fieldsByCodec.get("video"))
+        data_frame_to_csv(
+            df, self.source_path, self.data_separator, self.fieldsByCodec.get("video")
+        )
 
     def _edit_audio_fields(
-        self, 
-        file_path: Union[str, Path], 
-        fields: Dict[str, Any]
+        self, file_path: Union[str, Path], fields: Dict[str, Any]
     ) -> bool:
         """Met à jour les étiquettes (tags) d'un fichier média audio ou vidéo."""
         path_obj = Path(file_path)
@@ -140,96 +144,180 @@ class CVideo(CMedia):
             return True
 
         except Exception as e:
+            self.logger.logError(f"Error with {path_obj} : failed to edit tags ({e})")
+            return False
+
+    def transcribe(self) -> None:
+        """Exécute la transcription audio et la synchronisation."""
+        if self.is_streaming:
+            data = self.transcribe_video_audio_stream()
+            json_to_stdout(data)
+        else:
+            data = self.process_files_parallel(self.transcribe_video_audio_file)
+            dfs = self.build_dataframes_by_codec(
+                data, log_message="Audio transcription map generated for "
+            )
+            self.export_dataframes_to_csv_by_codec(dfs)
+
+    def transcribe_video_audio_file(
+        self,
+        file_path: Union[str, Path],
+        add_srt: bool = False,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Transcrit un fichier vidéo/audio et génère soit des commandes FFmpeg, soit des blocs SRT."""
+        path_obj = Path(file_path).resolve()
+        segment_data: List[Dict[str, Any]] = []
+        result: Dict[str, List[Dict[str, Any]]] = {}
+
+        if not (is_video(path_obj) or is_audio(path_obj)):
+            return result
+
+        try:
+            segment_data = self.logger.logElapsedTime(
+                lambda: self.whisper_model.get_file_transcription_data(path_obj),
+                f"Processing {path_obj.name} to get transcription data...",
+            )
+
+            self.logger.log(
+                f"Transcription result of {path_obj.name} -> {len(segment_data)} blocs."
+            )
+            
+            audio_transcription = [
+                {
+                    "path": str(path_obj),
+                    "index": i,
+                    "start": segment["start"],
+                    "end": segment["end"],
+                    "duration": segment["end"] - segment["start"],
+                    "text": segment["text"],
+                    "data": self._get_data(0 if add_srt else 1, i, segment),
+                }
+                for i, segment in enumerate(segment_data)
+            ]
+
+            result = {"audioTranscription": audio_transcription}
+            self.logger.log(f"Transcription successful: {path_obj.name}")
+
+        except Exception as ex:
+            self.logger.logError(f"Error transcribing {path_obj.name}: {ex}")
+
+        return result
+
+    def transcribe_video_audio_stream(
+        self,
+        add_srt: bool = False
+        ) -> List[Dict[str, Any]]:
+        """Lit un flux audio PCM 16-bit 16kHz Mono depuis stdin et retourne sa transcription."""
+        stream = sys.stdin.buffer
+        header = self._read_exact(stream, 8)
+
+        # 1. Validation de l'en-tête du flux
+        if len(header) < 8:
             self.logger.logError(
-                f"Error with {path_obj} : failed to edit tags ({e})"
+                "Stream header missing or incomplete (expected 8 bytes for length prefix)."
+            )
+            return []
+
+        length = struct.unpack(">Q", header)[0]
+        data = self._read_exact(stream, length)
+
+        # 2. Validation du payload PCM 16-bit brut
+        if not self._validate_raw_pcm_stream(data, expected_length=length):
+            return []
+
+        # 3. Conversion PCM int16 -> float32 normalisé [-1.0, 1.0]
+        audio = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+
+        # 4. Validation finale du tableau NumPy
+        if not self._validate_audio_array(audio):
+            return []
+
+        # Inférence Whisper
+        segment_data = self.logger.logElapsedTime(
+            lambda: self.whisper_model.get_file_transcription_data(audio),
+            "Processing stdin stream for transcription...",
+        )
+
+        if not segment_data:
+            return []
+
+        audio_transcription = [
+            {
+                "stream": "stdin",
+                "index": i,
+                "start": segment["start"],
+                "end": segment["end"],
+                "duration": segment["end"] - segment["start"],
+                "data": self._get_data(0 if add_srt else -1, i, segment),
+            }
+            for i, segment in enumerate(segment_data)
+        ]
+
+        self.logger.log("Transcription successful for stdin stream")
+        return audio_transcription
+
+    def _validate_raw_pcm_stream(self, raw_data: bytes, expected_length: int) -> bool:
+        """Contrôle d'intégrité du buffer binaire PCM avant conversion."""
+        if len(raw_data) < expected_length:
+            self.logger.logError(
+                f"Incomplete payload: expected {expected_length} bytes, got {len(raw_data)} bytes."
             )
             return False
-    
-    def transcribe(self) -> None:
-        """Runs parallel audio transcription and synchronization"""
-        self.mapping_video_audio_files = self.get_mapping_video_audio_files()
-        data = self.process_files_parallel(self.generate_audio_synchronization_map)
-        dfs = self.build_dataframes_by_codec(data, log_message="Audio synchronization map generated for ")
-        self.export_dataframes_to_csv_by_codec(dfs)
-            
-    def get_mapping_video_audio_files(self) -> Dict[Path, List[Path]]:
-        """Returns the mapping of video files to their corresponding audio files."""
-        df = data_frame_from_csv(self.other_source_path, self.data_separator)
-        
-        return {
-            Path(file_path).resolve(): Path(audio_path).resolve()
-            for file_path, audio_path in zip(df["file_path"], df["audio_path"])
-        }
-              
-    def generate_audio_synchronization_map(
-        self, 
-        file_path: Path
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """Génère la carte de correspondance entre les blocs HD et SD."""
-        path_obj = Path(file_path).resolve()
-        audio_path_obj = self.mapping_video_audio_files.get(path_obj)
-        segment_data: List[Dict[str, Any]] = []
-        audio_segment_data: List[Dict[str, Any]] = []
-        result: Dict[str, List[Dict[str, Any]]] = {}
-        
-        if not audio_path_obj:
-            self.logger.logError(f"No corresponding audio file found for {path_obj.name}. Skipping synchronization check.")
-            return result
-                
-        model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3-turbo")
 
-        segment_data, audio_segment_data = [
-            self.logger.logElapsedTime(
-                lambda : model.get_file_transcription_data(
-                    p,
-                    beam_size=1,
-                    voice_activity_detection_parameters=dict(min_silence_duration_ms=500)
-                    ),
-                f"Processing {p.name} to get transcription data...")
-                for p in (path_obj, audio_path_obj)
-            ]
-        
-        self.logger.log(f"Transcription result : Video -> {len(segment_data)} blocs | Audio -> {len(audio_segment_data)} blocs.")
-        alignment_map = []
-        min_len = min(len(segment_data), len(audio_segment_data))
+        if len(raw_data) == 0:
+            self.logger.logError("Stream payload is empty.")
+            return False
+
+        if len(raw_data) % 2 != 0:
+            self.logger.logError(
+                f"Invalid PCM 16-bit alignment: payload size ({len(raw_data)} bytes) is not a multiple of 2."
+            )
+            return False
+
+        return True
+
+    def _validate_audio_array(self, audio: np.ndarray) -> bool:
+        """Validation stricte des dimensions et du format du tableau NumPy converti."""
+        if audio.dtype != np.float32:
+            self.logger.logError(f"Invalid audio dtype: expected float32, got {audio.dtype}")
+            return False
+
+        if audio.ndim != 1:
+            self.logger.logError(f"Invalid audio layout: expected 1D (mono), got shape {audio.shape}")
+            return False
+
+        if audio.size == 0:
+            self.logger.logError("Converted audio array is empty.")
+            return False
+
+        return True
+
+    def _read_exact(self, stream: Any, n_bytes: int) -> bytes:
+        """Lit exactement n_bytes depuis un flux binaire."""
+        buffer = bytearray()
+        while len(buffer) < n_bytes:
+            chunk = stream.read(n_bytes - len(buffer))
+            if not chunk:
+                break
+            buffer.extend(chunk)
+        return bytes(buffer)
     
-        for i in range(min_len):
-            video = segment_data[i]
-            audio = audio_segment_data[i]
+    def _get_data(
+        self, 
+        data_type: int,
+        i: int,
+        seg: Dict[str, Any]
+        ) -> str:
+        self.logger.log(f"Get data of the segment {i} : {seg}")
         
-            # Timestamps respectifs pour la coupe audio SD et le calage HD
-            video_start, video_end = round(video["start"], 2), round(video["end"], 2)
-            audio_start, audio_end = round(audio["start"], 2), round(audio["end"], 2)
-            
-            # Calcul du ratio de vitesse pour ce bloc spécifique si les durées divergent
-            video_duration = video_end - video_start
-            audio_duration = audio_end - audio_start
-            
-            duration_ratio = video_duration / audio_duration if audio_duration > 0 else 1.0
-            # On bride le ratio atempo entre 0.5 et 2.0 pour éviter les aberrations de décodage audio
-            duration_ratio = max(0.5, min(2.0, duration_ratio))
-            atempo = round(duration_ratio, 3)
-            filter_cmd = f"atempo={atempo}" if abs(atempo - 1.0) > 0.05 else "anull"  # Pas de modif si très proche
-            
-            ffmpeg_command = [
-                "ffmpeg", "-y",
-                "-ss", str(audio_start),
-                "-to", str(audio_end),
-                "-i", str(audio_path_obj),
-                "-af", filter_cmd,
-                "-c:a", "aac", "-b:a", "192k",
-                str(self.target_path / f"chunk_{i:04d}.m4a")
-            ]
+        if data_type == 0:
+            return f"{i + 1}\n{format_timestamp(seg["start"])} --> {format_timestamp(seg["end"])}\n{seg["text"].strip()}\n\n"
         
-            alignment_map.append({
-                "index": i,
-                "video_start": video_start,
-                "video_end": video_end,
-                "audio_start": audio_start,
-                "audio_end": audio_end,
-                "atempo": atempo,
-                "ffmpeg_command": " ".join(ffmpeg_command)
-            })
+        if data_type == 1:
+            ffmpeg_cmd = [
+                "ffmpeg", "-y","-ss", "@audio_start","-to", "@audio_end","-i", "@audio_path","-af", "@atempo_or_anull","-c:a", "aac", "-b:a", "192k",
+                str(Path(self.target_path) / f"chunk_{i:04d}.m4a")
+                ]
+            return " ".join(ffmpeg_cmd)
         
-        result = {"audioSynchronization": alignment_map}
-        return result
+        return seg["text"]
