@@ -2,7 +2,7 @@
   "File": [
     {
       "Action": "Read",
-      "RootSourcePath": "C:\\Users\\SEDOUD\\Pictures\\2026-07-04",
+      "RootSourcePath": "D:\\Result\\Subtitle\\srt\\Transcription from Linux\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "ExtraFileRootSourcePath": "D:\\Result\\File\\",
       "RootTargetPath": "C:\\Users\\SEDOUD\\Pictures\\Documents by extension\\",
@@ -31,7 +31,7 @@
         "*.avi",
         "*.wmv",
         "*.srt",
-        "*.ts"
+        "*.txt"
       ]
     }
   ],
@@ -58,13 +58,14 @@
   "Video": [
     {
       "Action": "Read",
-      "RootSourcePaths": "E:\\",
-      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\New\\Windows\\",
+      "RootSourcePath": "E:\\",
+      "RootSourcePaths": "C:\\Users\\SEDOUD\\Videos\\New\\Windows\\video\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "RootTargetPath": "D:\\Result\\Video\\",
       "FilePatterns": [
         "*.mkv",
         "*.m4v",
+        "*.m4a",
         "*.mp4",
         "*.mpeg",
         "*.mpg",
@@ -96,6 +97,15 @@
       }
     },
     {
+      "Action": "Transcribe",
+      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\Windows\\video\\",
+      "LogRootSourcePath": "D:\\Result\\Logs\\",
+      "RootTargetPath": "D:\\Result\\Video\\",
+      "FilePatterns": [
+        "*.mp4"
+      ]
+    },
+    {
       "Action": "Write",
       "RootSourcePath": "D:\\Result\\Video\\videoInput.csv",
       "LogRootSourcePath": "D:\\Result\\Logs\\"
@@ -113,7 +123,7 @@
     },
     {
       "Action": "Transcribe",
-      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\New\\Windows\\",
+      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\Windows\\video\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "ExtraFileRootSourcePath": "D:\\Result\\Subtitle\\",
       "RootTargetPath": "D:\\Result\\Subtitle\\srt\\",
@@ -123,8 +133,10 @@
     },
     {
       "Action": "TranscribeAndCheck",
-      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\New\\Windows\\",
+      "RootSourcePaths": "E:\\Video\\IL\\Ronit Elkabetz\\",
+      "RootSourcePath": "C:\\Users\\SEDOUD\\Videos\\New\\Windows\\video\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
+      "ExtraFileRootSourcePaths": "D:\\Result\\Subtitle\\subtitleMapping_Film.csv",
       "ExtraFileRootSourcePath": "D:\\Result\\Subtitle\\subtitleMapping.csv",
       "RootTargetPath": "D:\\Result\\Subtitle\\",
       "FilePatterns": [

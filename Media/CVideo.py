@@ -311,9 +311,9 @@ class CVideo(CMedia):
         self.logger.log(f"Get data of the segment {i} : {seg}")
         
         if data_type == 0:
-            start = seg['start']
-            end = seg['end']
-            text = seg['text']
+            start = seg["start"]
+            end = seg["end"]
+            text = seg["text"]
             return f"{i + 1}\n{format_timestamp(start)} --> {format_timestamp(end)}\n{text.strip()}\n\n"
         
         if data_type == 1:

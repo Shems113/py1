@@ -22,7 +22,7 @@ $pythonCommonArgs = @(
 
 # --- Exécution ---
 if ($isStreaming) {
-    $streamingScript = "C:\Users\SEDOUD\Desktop\PowerShell\windows_streaming_audio.ps1"
+    $streamingScript = "C:\Users\SEDOUD\Desktop\PowerShell\streaming_audio.ps1"
     $inputFile       = "C:\Users\SEDOUD\Videos\New\Windows\video\La norme d'un vecteur.mp4"
     $outputJson      = "D:\Result\Video\La norme d'un vecteur.json"
 
