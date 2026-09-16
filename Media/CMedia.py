@@ -14,7 +14,7 @@ class CMedia:
         json_path: Union[str, Path],
         media_type: Any, 
         action_type: Any,
-        is_streaming: bool,
+        is_streaming: bool
     ) -> None:
         self.json_path = json_path
         self.media_type = media_type
