@@ -1,42 +1,61 @@
 import sys
 import time
+from typing import Callable, Any, List
 from loguru import logger
 
+
 class CLogger:
-    def __init__(self,logPaths):
-        self.logPaths = logPaths
-        # 1. On retire la configuration par défaut
-        logFormat='<green>{time:HH:mm:ss.SSSS}</green> | <level>{level: <3}</level> | {message}'
+    def __init__(self, log_paths: List[str]):
+        self.log_paths = log_paths
+        
+        # Format épuré : Heure | Niveau | Message
+        log_format = "<green>{time:HH:mm:ss.SSSS}</green> | <level>{level: <3}</level> | {message}"
+        
+        # 1. Suppression du handler par défaut
         logger.remove()
-        # 2. On ajoute un format simplifié (seulement l'heure, le niveau et le message)
-        logger.add(sys.stderr,format=logFormat)
-        for f in self.logPaths:
-            open(f,'w').close()
-            logger.add(f,rotation='500 MB',encoding='utf-8',format=logFormat)
+        
+        # 2. Handler console (sys.stderr) avec flush immédiat pour PowerShell
+        logger.add(sys.stderr, format=log_format, colorize=True, flush=True)
+        
+        # 3. Handlers fichiers (réinitialisation et écriture asynchrone)
+        for f in self.log_paths:
+            open(f, "w", encoding="utf-8").close()
+            logger.add(
+                f,
+                rotation="500 MB",
+                encoding="utf-8",
+                format=log_format,
+                enqueue=True,  # Évite les conflits d'accès concurrents aux fichiers
+            )
 
-    def log(self,*values):
-        logger.info(*values)
+    def log(self, *values: Any) -> None:
+        """Log un message avec le niveau INFO (concatène les arguments par un espace)."""
+        message = " ".join(str(v) for v in values)
+        logger.info(message)
 
-    def logError(self,*values):
-        logger.error(*values)
+    def logError(self, *values: Any) -> None:
+        """Log un message avec le niveau ERROR."""
+        message = " ".join(str(v) for v in values)
+        logger.error(message)
 
-    def log_file_progress(self, index, total, file_path):
-        """Log the progress of processed files with index/total and a short percent."""
+    def log_file_progress(self, index: int, total: int, file_path: str) -> None:
+        """Affiche la progression du traitement des fichiers avec pourcentage."""
         try:
             percent = (index / total) * 100 if total else 0
-            self.log(f'Processed {index}/{total} ({percent:.1f}%) : {file_path}')
+            self.log(f"Processed {index}/{total} ({percent:.1f}%) : {file_path}")
         except Exception:
-            # Fallback to a simple message if anything goes wrong
-            self.log(f'Processed {index}/{total} : {file_path}')
+            self.log(f"Processed {index}/{total} : {file_path}")
 
-    def logElapsedTime(self,func,funcName):
-        sep='-------------------------------------------------------------------'
+    def log_elapsed_time(self, func: Callable[[], Any], func_name: str) -> Any:
+        """Mesure et log le temps d'exécution d'une fonction."""
+        sep = "-------------------------------------------------------------------"
         self.log(sep)
-        self.log(f'Init : {funcName}')
+        self.log(f"Init : {func_name}")
+        
         start_time = time.time()
-        result=func()
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        self.log(f'Time spent in {funcName} : {elapsed_time:.2f} seconds')
+        result = func()
+        elapsed_time = time.time() - start_time
+        
+        self.log(f"Time spent in {func_name} : {elapsed_time:.2f} seconds")
         self.log(sep)
         return result
