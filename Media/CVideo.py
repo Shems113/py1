@@ -1,7 +1,6 @@
 from pathlib import Path
 import sys
 from typing import Any, Dict, List, Union
-
 import numpy as np
 import pandas as pd
 
@@ -9,6 +8,7 @@ from Common.CUtils import (
     data_frame_from_csv,
     data_frame_to_csv,
     ensure_ffmpeg_available,
+    extract_mono_16khz_pcm_stream,  # <--- Nouvelle fonction importée
     format_timestamp,
     get_audio_id3_tags,
     get_audio_tags,
@@ -17,7 +17,6 @@ from Common.CUtils import (
     is_audio,
     is_text_file,
     is_video,
-    json_to_stdout,
 )
 from Common.CWhisperModel import CWhisperModel
 from Common.EEnums import EActionType, EMediaType
@@ -159,7 +158,13 @@ class CVideo(CMedia):
         """Exécute la transcription audio et la synchronisation."""
         if self.is_streaming:
             data = self.transcribe_video_audio_stream()
-            json_to_stdout(data)
+            df = pd.DataFrame(data)
+            data_frame_to_csv(
+                df=df,
+                target=sys.stdout,
+                separator=self.data_separator,
+                fields=self.fieldsByCodec.get("audioTranscription"),
+            )
         else:
             data = self.process_files_parallel(self.transcribe_video_audio_file)
             dfs = self.build_dataframes_by_codec(
@@ -172,97 +177,72 @@ class CVideo(CMedia):
         file_path: Union[str, Path],
         add_srt: bool = False,
     ) -> Dict[str, List[Dict[str, Any]]]:
-        """Transcrit un fichier vidéo/audio et génère soit des commandes FFmpeg, soit des blocs SRT."""
+        """Convertit un fichier média en flux PCM via CUtils et délègue la transcription à transcribe_video_audio_stream."""
         path_obj = Path(file_path).resolve()
-        segment_data: List[Dict[str, Any]] = []
-        result: Dict[str, List[Dict[str, Any]]] = {}
-
         if not (is_video(path_obj) or is_audio(path_obj)):
-            return result
+            return {}
 
         try:
-            segment_data = self.logger.logElapsedTime(
-                lambda: self.whisper_model.get_file_transcription_data(
-                    path_obj,
-                    beam_size=5,
-                    patience=1.0,
-                    best_of=5,
-                    temperature=(0.0, 0.2, 0.4),
-                    condition_on_previous_text=False,
-                    voice_activity_detection_filter=True,
-                    voice_activity_detection_parameters={
-                        "threshold": 0.5,
-                        "min_speech_duration_ms": 250,
-                        "max_speech_duration_s": 12.0,
-                        "min_silence_duration_ms": 500,
-                        "speech_pad_ms": 400,
-                    },
-                    word_timestamps=True,
-                ),
-                f"Processing {path_obj.name} to get transcription data...",
+            self.logger.log(f"Extracting PCM stream from file: {path_obj.name}")
+
+            # Utilisation de la fonction d'extraction dédiée
+            raw_pcm = extract_mono_16khz_pcm_stream(path_obj)
+
+            if not raw_pcm:
+                self.logger.logError(
+                    f"FFmpeg stream extraction returned empty data for {path_obj.name}"
+                )
+                return {}
+
+            # Passage du flux extrait à la méthode stream
+            audio_transcription = self.transcribe_video_audio_stream(
+                stream_input=raw_pcm,
+                add_srt=add_srt,
+                source_name=str(path_obj),
             )
 
-            self.logger.log(
-                f"Transcription result of {path_obj.name} -> {len(segment_data)} blocs."
-            )
-
-            audio_transcription = [
-                {
-                    "path": str(path_obj),
-                    "index": i,
-                    "start": segment["start"],
-                    "end": segment["end"],
-                    "duration": segment["end"] - segment["start"],
-                    "text": segment["text"],
-                    "data": self._get_data(0 if add_srt else 1, i, segment),
-                }
-                for i, segment in enumerate(segment_data)
-            ]
-
-            result = {"audioTranscription": audio_transcription}
             self.logger.log(f"Transcription successful: {path_obj.name}")
+            return {"audioTranscription": audio_transcription}
 
         except Exception as ex:
             self.logger.logError(f"Error transcribing {path_obj.name}: {ex}")
-
-        return result
+            return {}
 
     def transcribe_video_audio_stream(
-        self, 
-        add_srt: bool = False, 
-        chunk_size: int = 65536
+        self,
+        stream_input: Union[bytes, None] = None,
+        add_srt: bool = False,
+        chunk_size: int = 65536,
+        source_name: str = "stdin",
     ) -> List[Dict[str, Any]]:
-        """Lit un flux audio PCM 16-bit 16kHz Mono depuis stdin jusqu'à EOF et retourne sa transcription."""
-        stream = sys.stdin.buffer
-        chunks = []
-        total_bytes = 0
+        """Lit un flux audio PCM 16-bit 16kHz Mono (depuis stdin ou un paramètre bytes) et exécute Whisper."""
 
-        self.logger.log("Reading streaming audio from stdin until EOF...")
-
-        # 1. Lecture continue par chunks jusqu'à la fermeture du flux (EOF)
-        while True:
-            chunk = stream.read(chunk_size)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total_bytes += len(chunk)
-
-        raw_data = b"".join(chunks)
+        # 1. Récupération des données binaire : soit transmises directement, soit lues depuis stdin
+        if stream_input is not None:
+            raw_data = stream_input
+        else:
+            self.logger.log("Reading streaming audio from stdin until EOF...")
+            stream = sys.stdin.buffer
+            chunks = []
+            while True:
+                chunk = stream.read(chunk_size)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            raw_data = b"".join(chunks)
 
         # 2. Validation du payload PCM 16-bit brut
         if not self._validate_raw_pcm_stream(raw_data):
             return []
 
         # 3. Conversion PCM int16 -> float32 normalisé [-1.0, 1.0]
-        audio = (
-            np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
-        )
+        audio = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
 
-        # 4. Validation finale du tableau NumPy
+        # 4. Validation du tableau NumPy
         if not self._validate_audio_array(audio):
             return []
 
-        # Inférence Whisper
+        # 5. Appel UNIQUE du modèle Whisper
         segment_data = self.logger.logElapsedTime(
             lambda: self.whisper_model.get_file_transcription_data(
                 audio,
@@ -281,25 +261,30 @@ class CVideo(CMedia):
                 },
                 word_timestamps=True,
             ),
-            "Processing audio stream for transcription...",
+            f"Processing audio stream ({source_name}) for transcription...",
         )
 
         if not segment_data:
             return []
 
+        # 6. Structuration des résultats
+        is_file_source = source_name != "stdin"
+
         audio_transcription = [
             {
-                "stream": "stdin",
+                "path" if is_file_source else "stream": source_name,
                 "index": i,
                 "start": segment["start"],
                 "end": segment["end"],
                 "duration": segment["end"] - segment["start"],
-                "data": self._get_data(0 if add_srt else -1, i, segment),
+                "text": segment["text"],
+                "srt": self._get_data(True, i, segment),
+                "ffmpeg_cmd": self._get_data(False, i, segment),
             }
             for i, segment in enumerate(segment_data)
         ]
 
-        self.logger.log("Transcription successful for stdin stream")
+        self.logger.log(f"Transcription successful for {source_name}")
         return audio_transcription
 
     def _validate_raw_pcm_stream(self, raw_data: bytes) -> bool:
@@ -336,33 +321,38 @@ class CVideo(CMedia):
 
         return True
 
-    def _get_data(self, data_type: int, i: int, seg: Dict[str, Any]) -> str:
+    def _get_data(
+        self,
+        is_srt: int,
+        i: int, 
+        seg: Dict[str, Any]
+        ) -> str:
         self.logger.log(f"Get data of the segment {i} : {seg}")
 
-        if data_type == 0:
-            start = seg["start"]
-            end = seg["end"]
-            text = seg["text"]
-            return f"{i + 1}\n{format_timestamp(start)} --> {format_timestamp(end)}\n{text.strip()}\n\n"
+        if is_srt:
+            start = format_timestamp(seg["start"])
+            end = format_timestamp(seg["end"])
+            text = seg["text"].strip()
+        
+            # Rend littéralement : "1\n00:00:00,000 --> 00:00:02,000\nTexte du segment\n\n"
+            return f"{i + 1}\\n{start} --> {end}\\n{text}\\n\\n"
+            
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "@audio_start",
+            "-to",
+            "@audio_end",
+            "-i",
+            "@audio_path",
+            "-af",
+            "@atempo_or_anull",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            str(Path(self.target_path) / f"chunk_{i:04d}.m4a"),
+        ]
 
-        if data_type == 1:
-            ffmpeg_cmd = [
-                "ffmpeg",
-                "-y",
-                "-ss",
-                "@audio_start",
-                "-to",
-                "@audio_end",
-                "-i",
-                "@audio_path",
-                "-af",
-                "@atempo_or_anull",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
-                str(Path(self.target_path) / f"chunk_{i:04d}.m4a"),
-            ]
-            return " ".join(ffmpeg_cmd)
-
-        return seg["text"]
+        return " ".join(ffmpeg_cmd)

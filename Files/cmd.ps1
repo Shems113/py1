@@ -11,34 +11,34 @@ Clear-Host
 $globalEnv   = "D:\Projets\Python\global-env"
 $pyExe       = "$globalEnv\Scripts\python.exe"
 $pyPath      = "D:\Projets\Python\repos\py1\Main.py"
-$isStreaming = $true
+$pyVPath      = "D:\Projets\Python\repos\py1\CVideoApp.py"
+$isStreaming = $false
 
 # Arguments transmis au script Python Main.py
 $pythonCommonArgs = @(
     "--mediaType", "Video",
-    "--actionType", "Transcribe",
-    "--isStreaming", "$isStreaming"
+    "--actionType", "Transcribe"
 )
 
 # --- Exécution ---
 if ($isStreaming) {
-    $streamingScript = "C:\Users\SEDOUD\Desktop\PowerShell\streaming_audio_2.ps1"
+    $streamingScript = "C:\Users\SEDOUD\Desktop\PowerShell\streaming_audio.ps1"
     $inputFile       = "C:\Users\SEDOUD\Videos\New\Windows\video\La norme d'un vecteur.mp4"
-    $outputJson      = "D:\Result\Video\La norme d'un vecteur.json"
-
+    $outputFile      = "D:\Result\Subtitle\La norme d'un vecteur.csv"
     # Utilisation des paramètres génériques :
     # -ExecutorExe   : le binaire local (python.exe)
     # -ExecutorFlags : le flag d'optimisation (-OO) placé AVANT le script .py
     # -ScriptPath    : le chemin du script Main.py
     # -AppArgs       : la liste des arguments transmis à Main.py
-	
-    & $streamingScript -InputFile $inputFile -OutputFile $outputJson -ExecutorExe $pyExe -ExecutorFlags "-OO" -ScriptPath $pyPath -AppArgs $pythonCommonArgs
+	$pythonCommonArgs += "--isStreaming"
+    & $streamingScript -InputFile $inputFile -OutputFile $outputFile -ExecutorExe $pyExe -ExecutorFlags "-OO" -ScriptPath $pyPath -AppArgs $pythonCommonArgs
 } else {
-    uv run --python $globalEnv -OO $pyPath @pythonCommonArgs
+    # Active l'optimisation -OO pour Python via la variable d'environnement
+    $env:PYTHONOPTIMIZE = 2
+    # uv run --python $globalEnv $pyPath @pythonCommonArgs
+	# 2. Exécution de l'application vidéo seule (CVideoApp.py)
+	uv run --python $globalEnv $pyVPath
 }
-
-# 2. Exécution de l'application vidéo seule (CVideoApp.py)
-# uv run --python $globalEnv -OO $pyVPath
 
 # --- Section .NET ---
 # Publication et exécution si la publication réussit 
@@ -55,6 +55,8 @@ if ($isStreaming) {
 # 3. On LANÇANT l'exécutable, on lui passe l'argument de l'URL
 # & $exePath --urls "http://0.0.0.0:5000"
 # & $pyExePath $pyPath
+
+# ---------------------
 
 # Nettoyage en profondeur des fichiers système et composants obsolètes WinSxS & vidage automatique des caches temporaires
 # .\Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase

@@ -35,10 +35,10 @@ ACTION_MAPPING: Dict[EActionType, str] = {
     EActionType.TranscribeAndCheck: "transcribeAndCheck",
 }
 
+
 def process(
-    media: Union[File, Gmail, Music, Video, Word],
-    action_name: str
-    ) -> None:
+    media: Union[File, Gmail, Music, Video, Word], action_name: str
+) -> None:
     """Initialise les logs et exécute la méthode d'action sur l'instance de média."""
     if hasattr(media, action_name) and callable(getattr(media, action_name)):
         media.init_log()
@@ -52,7 +52,10 @@ def main() -> None:
         "--jsonPath",
         type=str,
         help="Path to the JSON settings file",
-        default=str(Path("Files") / f"{('Windows' if platform.system() == 'Windows' else 'Linux')}Settings.json"),
+        default=str(
+            Path("Files")
+            / f"{('Windows' if platform.system() == 'Windows' else 'Linux')}Settings.json"
+        ),
     )
     parser.add_argument(
         "--mediaType",
@@ -68,9 +71,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--isStreaming",
-        type=bool,
+        action=argparse.BooleanOptionalAction,
+        default=False,
         help="Flag indicating if the data source is streamed",
-        default=False
     )
 
     args = parser.parse_args()
@@ -81,7 +84,9 @@ def main() -> None:
 
     # Instanciation et exécution
     media_class = MEDIA_MAPPING[media_type]
-    media_instance = media_class(Path(args.jsonPath), action_type, bool(args.isStreaming))
+    media_instance = media_class(
+        Path(args.jsonPath), action_type, args.isStreaming
+    )
     action_name = ACTION_MAPPING[action_type]
     process(media_instance, action_name)
 

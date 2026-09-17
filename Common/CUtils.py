@@ -11,10 +11,11 @@ import subprocess
 import sys
 import time
 import pandas as pd
+import csv
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, IO
 import charset_normalizer
-from ffmpeg._probe import probe as ffmpeg_probe
+import ffmpeg  # Importation propre et officielle du package ffmpeg-python
 from mutagen.aac import AAC
 from mutagen.easyid3 import EasyID3
 from mutagen.flac import FLAC
@@ -61,8 +62,10 @@ def get_ffmpeg_version() -> str:
             text=True,
             check=True,
         )
-        return res.stdout.split("\n")[0]
-    except Exception:
+        # splitlines() gère proprement tous les types de sauts de ligne (\n, \r\n)
+        lines = res.stdout.splitlines()
+        return lines[0].strip() if lines else "Version inconnue"
+    except (subprocess.SubprocessError, FileNotFoundError):
         return "ffmpeg introuvable dans le PATH"
 
 def ensure_ffmpeg_available(verbose: bool = True) -> Optional[str]:
@@ -77,6 +80,41 @@ def ensure_ffmpeg_available(verbose: bool = True) -> Optional[str]:
             print("Version de ffmpeg : ffmpeg introuvable dans le PATH")
     _FFMPEG_CHECKED = True
     return ffmpeg_path
+
+
+def extract_mono_16khz_pcm_stream(
+    file_path: Union[str, Path], 
+    logger: Optional[Any] = None
+) -> bytes:
+    """Extrait l'audio d'un fichier média sous forme de flux PCM 16-bit 16 kHz Mono en mémoire."""
+    path_obj = Path(file_path).resolve()
+
+    if not path_obj.exists():
+        if logger:
+            logger.logError(f"Fichier introuvable : {path_obj}")
+        return b""
+
+    try:
+        out, _ = (
+            ffmpeg
+            .input(str(path_obj))
+            .output(
+                'pipe:',
+                format='s16le',
+                acodec='pcm_s16le',
+                ac=1,
+                ar='16000',
+                vn=None,  # Ignore le flux vidéo
+                sn=None   # Ignore les sous-titres
+            )
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+        return out
+    except ffmpeg.Error as e:
+        if logger:
+            error_msg = e.stderr.decode('utf-8', errors='ignore') if e.stderr else str(e)
+            logger.logError(f"Échec de l'extraction audio FFmpeg pour {path_obj.name} : {error_msg}")
+        return b""
 
 
 def get_decimal_separator() -> str:
@@ -140,10 +178,13 @@ def get_video_streams_and_chapters(
     file_path: Union[str, Path]
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Récupère simultanément les flux vidéo/audio et les chapitres via un seul appel ffprobe."""
-    probe_data = ffmpeg_probe(str(file_path), show_chapters=None)
-    streams = probe_data.get("streams", [])
-    chapters = probe_data.get("chapters", [])
-    return streams, chapters
+    try:
+        probe_data = ffmpeg.probe(str(file_path), show_chapters=None)
+        streams = probe_data.get("streams", [])
+        chapters = probe_data.get("chapters", [])
+        return streams, chapters
+    except ffmpeg.Error:
+        return [], []
 
 
 def is_media_type(file_path: Union[str, Path], media_type: str) -> bool:
@@ -343,6 +384,8 @@ def json_to_stdout(data: List[Dict[str, Any]]) -> None:
     json_bytes = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
     sys.stdout.buffer.write(json_bytes)
     sys.stdout.buffer.flush()
+
+
 # --- Pandas & Data Processing ---
 
 
@@ -362,27 +405,42 @@ def data_frame_from_csv(
         decimal=get_decimal_separator(),
     )
 
-
 def data_frame_to_csv(
     df: pd.DataFrame,
-    file_path: Union[str, Path],
+    target: Union[str, Path, IO[str]],
     separator: str,
     fields: Optional[List[str]] = None,
 ) -> None:
-    """Exporte un DataFrame vers un CSV."""
-    path_obj = Path(file_path)
-    path_obj.parent.mkdir(parents=True, exist_ok=True)
+    """Exporte un DataFrame vers un CSV ou un flux stdout sans rompre la structure."""
+    if isinstance(target, (str, Path)):
+        path_obj = Path(target)
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        target = path_obj
 
     if fields:
         valid_fields = [col for col in fields if col in df.columns]
         df = df[valid_fields]
 
+    # Détermination des arguments d'exportation
+    is_path = isinstance(target, Path)
+    extra_kwargs = {}
+
+    if is_path:
+        extra_kwargs["encoding"] = "utf-8-sig"
+    else:
+        # Reconfiguration explicite uniquement si la cible est sys.stdout
+        if target is sys.stdout and hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
+        
+        # Évite le problème du double retour chariot (\r\r\n) sur les flux/buffers
+        extra_kwargs["lineterminator"] = "\n"
+
     df.to_csv(
-        path_obj,
+        target,
         sep=separator,
-        encoding="utf-8-sig",
         decimal=get_decimal_separator(),
         index=False,
+        **extra_kwargs,
     )
 
 def compute_carrefour_bill_values(
@@ -420,13 +478,13 @@ def compute_carrefour_bill_values(
     return df_res, formatted
 
 def format_timestamp(seconds: float) -> str:
-        """Convertit des secondes en format de timestamp SRT (HH:MM:SS,mmm)."""
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        milliseconds = int((seconds - int(seconds)) * 1000)
-        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
-    
+    """Convertit des secondes en format de timestamp SRT (HH:MM:SS,mmm)."""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    milliseconds = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+
 def time_to_seconds(t):
     """Convertit un objet pysrt time en secondes."""
     return t.hours * 3600 + t.minutes * 60 + t.seconds + t.milliseconds / 1000
