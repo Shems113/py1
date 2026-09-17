@@ -42,10 +42,9 @@ class CGmail(CMedia):
     def __init__(
         self, 
         json_path: Union[str, Path],
-        action_type: EActionType,
-        is_streaming: bool
+        action_type: EActionType
     ) -> None:
-        super().__init__(json_path, EMediaType.Gmail, action_type, is_streaming)
+        super().__init__(json_path, EMediaType.Gmail, action_type)
         self.gmail_api_service: Optional[Resource] = self._call_gmail_api_service()
 
     def _call_gmail_api_service(self) -> Optional[Resource]:

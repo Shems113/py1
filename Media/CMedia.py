@@ -3,7 +3,7 @@ from pathlib import Path
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Union
-
+import sys
 import pandas as pd
 import Common.CUtils as Utils
 from Common.CLogger import CLogger as Logger
@@ -13,13 +13,12 @@ class CMedia:
         self, 
         json_path: Union[str, Path],
         media_type: Any, 
-        action_type: Any,
-        is_streaming: bool
+        action_type: Any
     ) -> None:
         self.json_path = json_path
         self.media_type = media_type
         self.action_type = action_type
-        self.is_streaming = is_streaming
+        self.is_streaming = not sys.stdin.isatty()
         self.data_separator: str = ";"
 
         # Détermination dynamique de la racine du projet
@@ -54,8 +53,7 @@ class CMedia:
 
         self.max_worker = 10
         self.logger = Logger(self.log_paths)
-        
-
+      
     def _resolve_path(
         self, 
         raw_path: Union[str, Path, None]
@@ -123,7 +121,7 @@ class CMedia:
         logs = (
             f"Media : {self.media_type.name}",
             f"Action : {self.action_type.name}",
-            f"Is Streaming : {self.is_streaming}",
+            f"Is streaming : {self.is_streaming}",
             f"Log paths : {self.log_paths}",
             f"Source directory path : {self.source_path}",
             f"File patterns : {self.file_patterns}",

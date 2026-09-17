@@ -28,10 +28,9 @@ class CVideo(CMedia):
         self,
         json_path: Union[str, Path],
         action_type: EActionType,
-        is_streaming: bool,
         media_type: EMediaType = EMediaType.Video,
     ) -> None:
-        super().__init__(json_path, media_type, action_type, is_streaming)
+        super().__init__(json_path, media_type, action_type)
         self.whisper_model = CWhisperModel(
             logger=self.logger, model_size_or_path="large-v3"
         )

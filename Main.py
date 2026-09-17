@@ -69,13 +69,6 @@ def main() -> None:
         help="Type of action",
         default=DEFAULT_ACTION.name,
     )
-    parser.add_argument(
-        "--isStreaming",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Flag indicating if the data source is streamed",
-    )
-
     args = parser.parse_args()
 
     # Récupération de l'action et du type de média depuis les énumérations
@@ -85,7 +78,7 @@ def main() -> None:
     # Instanciation et exécution
     media_class = MEDIA_MAPPING[media_type]
     media_instance = media_class(
-        Path(args.jsonPath), action_type, args.isStreaming
+        Path(args.jsonPath), action_type
     )
     action_name = ACTION_MAPPING[action_type]
     process(media_instance, action_name)

@@ -17,11 +17,10 @@ class CSubtitle(CMedia):
     def __init__(
         self,
         json_path: Union[str, Path],
-        action_type: EActionType,
-        is_streaming: bool
+        action_type: EActionType
     ) -> None:
-        super().__init__(json_path, EMediaType.Subtitle, action_type, is_streaming)
-        self.video = CVideo(self.json_path, self.action_type, is_streaming , EMediaType.Subtitle)
+        super().__init__(json_path, EMediaType.Subtitle, action_type)
+        self.video = CVideo(self.json_path, self.action_type, EMediaType.Subtitle)
         self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3")
         is_transcribe_action = action_type in [EActionType.Transcribe, EActionType.TranscribeAndCheck]
         self.max_worker = (4 if (platform.system() == "Windows") and is_transcribe_action else 1)
