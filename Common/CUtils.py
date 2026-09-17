@@ -11,7 +11,6 @@ import subprocess
 import sys
 import time
 import pandas as pd
-import csv
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, IO
 import charset_normalizer

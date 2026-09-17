@@ -6,8 +6,7 @@ import pandas as pd
 
 from Common.CUtils import (
     time_to_seconds,
-    data_frame_from_csv,
-    json_to_stdout
+    data_frame_from_csv
 )
 from Common.EEnums import EActionType, EMediaType
 from Common.CWhisperModel import CWhisperModel
@@ -36,8 +35,7 @@ class CSubtitle(CMedia):
     def transcribe(self) -> None:
         """Runs parallel transcription of targeted videos, generates .srt files, and exports metadata DataFrames to CSV."""
         if self.is_streaming:
-            data = self.video.transcribe_video_audio_stream(add_srt=True)
-            json_to_stdout(data)
+            self.video.transcribe()
         else:
             data = self.process_files_parallel(self._transcribe_video_audio_file_in_subtitle)
             dfs = self.build_dataframes_by_codec(data, log_message="Transcribed ")
@@ -75,7 +73,7 @@ class CSubtitle(CMedia):
                 return result
             
             with open(srt_obj_path, "w", encoding="utf-8") as f:
-                for segment in self.video.transcribe_video_audio_file(path_obj , add_srt=True).get("audioTranscription",[]):
+                for segment in self.video.transcribe_video_audio_file(path_obj).get("audioTranscription",[]):
                     f.write(segment["data"])
             
             result = {"subtitleMapping": [{"file_path": str(path_obj), "srt_path": str(srt_obj_path)}]}

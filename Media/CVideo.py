@@ -157,7 +157,7 @@ class CVideo(CMedia):
     def transcribe(self) -> None:
         """Exécute la transcription audio et la synchronisation."""
         if self.is_streaming:
-            data = self.transcribe_video_audio_stream()
+            data = self._transcribe_video_audio_stream()
             df = pd.DataFrame(data)
             data_frame_to_csv(
                 df=df,
@@ -174,10 +174,9 @@ class CVideo(CMedia):
 
     def transcribe_video_audio_file(
         self,
-        file_path: Union[str, Path],
-        add_srt: bool = False,
+        file_path: Union[str, Path]
     ) -> Dict[str, List[Dict[str, Any]]]:
-        """Convertit un fichier média en flux PCM via CUtils et délègue la transcription à transcribe_video_audio_stream."""
+        """Convertit un fichier média en flux PCM via CUtils et délègue la transcription à _transcribe_video_audio_stream."""
         path_obj = Path(file_path).resolve()
         if not (is_video(path_obj) or is_audio(path_obj)):
             return {}
@@ -195,9 +194,8 @@ class CVideo(CMedia):
                 return {}
 
             # Passage du flux extrait à la méthode stream
-            audio_transcription = self.transcribe_video_audio_stream(
+            audio_transcription = self._transcribe_video_audio_stream(
                 stream_input=raw_pcm,
-                add_srt=add_srt,
                 source_name=str(path_obj),
             )
 
@@ -208,10 +206,9 @@ class CVideo(CMedia):
             self.logger.logError(f"Error transcribing {path_obj.name}: {ex}")
             return {}
 
-    def transcribe_video_audio_stream(
+    def _transcribe_video_audio_stream(
         self,
         stream_input: Union[bytes, None] = None,
-        add_srt: bool = False,
         chunk_size: int = 65536,
         source_name: str = "stdin",
     ) -> List[Dict[str, Any]]:
