@@ -13,7 +13,9 @@ from Torrent.CTorrentManager import CTorrentManager
 class CVideoApp:
     """Application web Flask pour la gestion et le traitement de médias via CSV."""
 
-    def __init__(self, input_dir: Union[str, Path] = r"D:\Result\Film"):
+    def __init__(
+        self, 
+        input_dir: Union[str, Path] = r"D:\Result\Film"):
         # Instanciation des services
         self.bitport = CBitport()
         self.opensubtitles = COpenSubtitles()
@@ -87,6 +89,10 @@ class CVideoApp:
         def route_search_films_torrents():
             return make_action(self.torrent_manager.route_search_films_torrents, ("films", "films_torrents"))()
 
+        @self.app.route("/downloadFilms", endpoint="route_download_films")
+        def route_download_films():
+            return make_action(self.torrent_manager.route_download_films, ("films_torrents", "output"))()
+
         # ----------------------------------------------------------------------
 
         @self.app.route("/discoverBitportCloudFolders")
@@ -115,7 +121,12 @@ class CVideoApp:
         def route_download_films_subtitles():
             return make_action(self.opensubtitles.route_download_films_subtitles, ("films_subtitles", "output"))()
 
-    def run(self, host: str = "127.0.0.1", port: int = 5000, debug: bool = False) -> None:
+    def run(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 5000,
+        debug: bool = False
+        ) -> None:
         """Démarre le serveur web Flask et ouvre automatiquement le navigateur."""
         url = f"http://{host}:{port}"
         print(f"Lancement de l'application sur {url}")

@@ -7,12 +7,15 @@ from typing import Dict, List, Optional, Union
 import pandas as pd
 
 from Common.CUtils import data_frame_from_csv, data_frame_to_csv
+from Common.Helper import select_best_quality_torrent
 from Common.EEnums import ETorrentSource as TorrentSource
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 from Torrent.CScraperLimeTorrents import CScraperLimeTorrents
 from Torrent.CScraperThePirateBay import CScraperThePirateBay
 from Torrent.CScraperTorznab import CScraperTorznab
 from Torrent.CScraperYts import CScraperYts
+from Torrent.CTorrentDownloader import CTorrentDownloader
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +30,10 @@ class CTorrentManager:
             TorrentSource.TORZNAB: CScraperTorznab(),
         }
 
-    def check_sources_health(self, timeout: int = 6) -> Dict[str, Dict[str, object]]:
+    def check_sources_health(
+        self,
+        timeout: int = 6
+        ) -> Dict[str, Dict[str, object]]:
         """Contrôle l'état de santé de l'ensemble des sources enregistrées."""
         results = {}
         with ThreadPoolExecutor(max_workers=len(self.scrapers)) as executor:
@@ -88,7 +94,11 @@ class CTorrentManager:
 
         return df
 
-    def search_film_torrent(self, name: str, year: Optional[Union[int, str]] = None) -> pd.DataFrame:
+    def search_film_torrent(
+        self, 
+        name: str,
+       year: Optional[Union[int, str]] = None
+       ) -> pd.DataFrame:
         """Formate la requête puis recherche sur l'ensemble des sources."""
         str_year = str(year).strip() if year is not None and str(year).strip().isdigit() else ""
         query = f"{name.strip()} {str_year}".strip()
@@ -99,7 +109,12 @@ class CTorrentManager:
             logger.error(f"Error {e} for {query}")
             return pd.DataFrame([{"error": str(e)}])
 
-    def search_film_torrents(self, tmdb_id: int, name: str, year: Optional[Union[int, str]] = None) -> pd.DataFrame:
+    def search_film_torrents(
+        self, 
+        tmdb_id: int, 
+        name: str, 
+        year: Optional[Union[int, str]] = None
+        ) -> pd.DataFrame:
         """Tente une recherche avec l'année puis retente sans l'année en cas d'échec."""
         for y in [year, None]:
             df = self.search_film_torrent(name, y)
@@ -109,8 +124,11 @@ class CTorrentManager:
         return pd.DataFrame()
 
     def route_search_films_torrents(
-        self, input_file: Union[str, Path], output_file: Union[str, Path], max_workers: int = 4
-    ) -> bool:
+        self, 
+        input_file: Union[str, Path],
+        output_file: Union[str, Path],
+        max_workers: int = 4
+       ) -> bool:
         """Traite une liste de films issue d'un fichier CSV en parallèle."""
         df_input = data_frame_from_csv(input_file, ";")
         if df_input.empty:
@@ -139,7 +157,60 @@ class CTorrentManager:
             final_df = final_df.sort_values(by=["tmdb_id", "seeds"], ascending=[True, False])
             data_frame_to_csv(final_df, output_file, ";")
             return True
+
         return False
+
+    def route_download_films(
+        self, 
+        input_file: Union[str, Path], 
+        output_file: Union[str, Path]
+    ) -> bool:
+        """Sélectionne les meilleurs torrents et lance leurs transferts via CTorrentDownloader."""
+        df_input = data_frame_from_csv(input_file, ";")
+        df_best = select_best_quality_torrent(df_input)
+
+        if df_best.empty:
+            print("Aucun torrent sélectionné pour le transfert.")
+            return False
+
+        data_frame_to_csv(df_best, output_file, ";")
+        magnet_data = {}
+
+        # Filtrage des lignes valides
+        selected_rows = df_best[
+            df_best["selection_status"].isin(["#1_best", "#2_best_quality_lower_size"])
+        ]
+
+        for row in selected_rows.itertuples():
+            tmdb_id = getattr(row, "tmdb_id", None)
+            name = getattr(row, "name", None)
+            magnet_val = getattr(row, "magnet", None)
+
+            if not magnet_val or pd.isna(magnet_val):
+                continue
+
+            magnet_data[str(magnet_val)] = f"{str(tmdb_id) if pd.notna(tmdb_id) else '0'}_{name}"
+
+        if not magnet_data:
+            print("Aucun lien magnet valide trouvé dans la sélection.")
+            return False
+
+        # Lancement du téléchargement
+        downloader = CTorrentDownloader(
+            magnet_data=magnet_data, 
+            output_dir=r"C:\Users\SEDOUD\Videos\New\Torrent"
+        )
+
+        try:
+            downloader.download_from_magnets()
+        except KeyboardInterrupt:
+            print("\nTéléchargement interrompu par l'utilisateur.")
+            return False
+        except Exception as e:
+            print(f"\nErreur durant le téléchargement : {e}")
+            return False
+
+        return True
 
 
 if __name__ == "__main__":

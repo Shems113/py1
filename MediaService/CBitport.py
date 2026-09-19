@@ -52,7 +52,10 @@ class CBitport:
 
     # --- Authentification & OAuth2 ---
 
-    def callback_bitport_access_token(self, code: str) -> str:
+    def callback_bitport_access_token(
+        self, 
+        code: str
+        ) -> str:
         """Échange le code reçu lors de la redirection OAuth contre un Access Token et un Refresh Token."""
         url = f"{self.bitport_base_url}/oauth2/access-token"
         payload = {
@@ -75,7 +78,10 @@ class CBitport:
 
         return json_data
 
-    def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
+    def refresh_access_token(
+        self, 
+        refresh_token: str
+        ) -> Dict[str, Any]:
         """Renouvelle le jeton d'accès sans re-passer par le navigateur."""
         url = f"{self.bitport_base_url}/oauth2/access-token"
         payload = {
@@ -109,7 +115,8 @@ class CBitport:
         return handle_response(res) or {}
 
     def discover_bitport_cloud_videos(
-        self, outputFile: Optional[Union[str, Path]] = None
+        self, 
+        outputFile: Optional[Union[str, Path]] = None
     ) -> Dict[str, Any]:
         """Récupère la liste de toutes les vidéos sur le cloud et l'exporte éventuellement en CSV."""
         url = f"{self.bitport_base_url}/cloud/all-videos"
@@ -126,7 +133,10 @@ class CBitport:
 
         return res
 
-    def create_film_folders_in_bitport(self, inputFile: Union[str, Path]) -> bool:
+    def create_film_folders_in_bitport(
+        self, 
+        inputFile: Union[str, Path]
+        ) -> bool:
         """Crée les dossiers manquants sur Bitport à partir d'un fichier CSV d'entrée."""
         cloud_folders = self.discover_bitport_cloud_folders()
         root_data = next(
@@ -165,7 +175,9 @@ class CBitport:
         return True
 
     def transfer_torrents_to_bitport(
-        self, inputFile: Union[str, Path], outputFile: Union[str, Path]
+        self, 
+        inputFile: Union[str, Path], 
+        outputFile: Union[str, Path]
     ) -> bool:
         """Sélectionne les meilleurs torrents et lance leurs transferts vers les dossiers Bitport correspondants."""
         df_input = data_frame_from_csv(inputFile, ";")

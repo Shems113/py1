@@ -12,7 +12,7 @@ import sys
 import time
 import pandas as pd
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, IO
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, IO
 import charset_normalizer
 import ffmpeg  # Importation propre et officielle du package ffmpeg-python
 from mutagen.aac import AAC
@@ -61,7 +61,6 @@ def get_ffmpeg_version() -> str:
             text=True,
             check=True,
         )
-        # splitlines() gère proprement tous les types de sauts de ligne (\n, \r\n)
         lines = res.stdout.splitlines()
         return lines[0].strip() if lines else "Version inconnue"
     except (subprocess.SubprocessError, FileNotFoundError):
@@ -129,6 +128,16 @@ def get_decimal_separator() -> str:
 
 
 # --- Media Metadata & Probing ---
+
+
+def get_video_extensions() -> Set[str]:
+    """Retourne l'ensemble de toutes les extensions de fichiers vidéo référencées par mimetypes."""
+    mimetypes.init()
+    return {
+        ext.lower()
+        for ext, mime in mimetypes.types_map.items()
+        if mime.startswith("video/")
+    }
 
 
 def get_audio_id3_tags(file_path: Union[str, Path]) -> Any:
@@ -355,7 +364,6 @@ def get_file_common_fields(
 
 # --- JSON & I/O ---
 
-# Racine du projet (dossier parent de Common/)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def _resolve_path(file_path: Union[str, Path]) -> Path:
@@ -420,18 +428,15 @@ def data_frame_to_csv(
         valid_fields = [col for col in fields if col in df.columns]
         df = df[valid_fields]
 
-    # Détermination des arguments d'exportation
     is_path = isinstance(target, Path)
     extra_kwargs = {}
 
     if is_path:
         extra_kwargs["encoding"] = "utf-8-sig"
     else:
-        # Reconfiguration explicite uniquement si la cible est sys.stdout
         if target is sys.stdout and hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8")
         
-        # Évite le problème du double retour chariot (\r\r\n) sur les flux/buffers
         extra_kwargs["lineterminator"] = "\n"
 
     df.to_csv(
