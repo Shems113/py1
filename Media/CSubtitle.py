@@ -73,7 +73,7 @@ class CSubtitle(CMedia):
             
             with open(srt_obj_path, "w", encoding="utf-8") as f:
                 for segment in self.video.transcribe_video_audio_file(path_obj).get("audioTranscription",[]):
-                    f.write(segment["data"])
+                    f.write(segment["srt"])
             
             result = {"subtitleMapping": [{"file_path": str(path_obj), "srt_path": str(srt_obj_path)}]}
             self.logger.log(f"Transcription successful: {path_obj.name} -> Saved to {srt_obj_path.name}")
