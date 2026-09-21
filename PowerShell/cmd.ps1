@@ -14,30 +14,31 @@ $pyPath      = "D:\Projets\Python\repos\py1\Main.py"
 $pyVPath      = "D:\Projets\Python\repos\py1\CVideoApp.py"
 $isStreaming = $false
 
+# Active l'optimisation -OO pour Python via la variable d'environnement
+$env:PYTHONOPTIMIZE = 2
+	
 # Arguments transmis au script Python Main.py
 $pythonCommonArgs = @(
     "--mediaType", "Video",
-    "--actionType", "Transcribe"
+    "--actionType", "ReadAndCheck"
 )
 
 # --- Exécution ---
 if ($isStreaming) {
-    $streamingScript = "C:\Users\SEDOUD\Desktop\PowerShell\streaming_audio.ps1"
-    $inputFile       = "C:\Users\SEDOUD\Videos\New\Windows\video\La norme d'un vecteur.mp4"
+    $streamingScript = "${env:USERPROFILE}\Desktop\PowerShell\streaming_audio.ps1"
+    $inputFile       = "${env:USERPROFILE}\Videos\New\Windows\video\La norme d'un vecteur.mp4"
     $outputFile      = "D:\Result\Subtitle\La norme d'un vecteur.csv"
     # Utilisation des paramètres génériques :
     # -ExecutorExe   : le binaire local (python.exe)
     # -ExecutorFlags : le flag d'optimisation (-OO) placé AVANT le script .py
     # -ScriptPath    : le chemin du script Main.py
     # -AppArgs       : la liste des arguments transmis à Main.py
-	$pythonCommonArgs += "--isStreaming"
+	
     & $streamingScript -InputFile $inputFile -OutputFile $outputFile -ExecutorExe $pyExe -ExecutorFlags "-OO" -ScriptPath $pyPath -AppArgs $pythonCommonArgs
 } else {
-    # Active l'optimisation -OO pour Python via la variable d'environnement
-    $env:PYTHONOPTIMIZE = 2
-    # uv run --python $globalEnv $pyPath @pythonCommonArgs
+    uv run --python $globalEnv $pyPath @pythonCommonArgs
 	# 2. Exécution de l'application vidéo seule (CVideoApp.py)
-	uv run --python $globalEnv $pyVPath
+	# uv run --python $globalEnv $pyVPath
 }
 
 # --- Section .NET ---
