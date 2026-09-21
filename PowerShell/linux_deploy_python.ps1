@@ -27,7 +27,7 @@ $OutputEncoding           = [System.Text.Encoding]::UTF8
 
 Write-Host "`n=== DEPLOIEMENT ET EXECUTIONS DISTANTES ===" -ForegroundColor Cyan
 
-$GetPodScriptPath = "C:\Users\SEDOUD\Desktop\PowerShell\get_vast_pod_info.ps1"
+$GetPodScriptPath = "get_vast_pod_info.ps1"
 
 # --- ÉTAPE 0 : APPEL DU SCRIPT DÉDIÉ POUR RÉCUPÉRER L'IP ET LE PORT ---
 if (-not (Test-Path $GetPodScriptPath)) {

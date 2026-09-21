@@ -23,7 +23,7 @@ param (
     [int]$CQ = 34
 )
 
-$GetPodScriptPath = "${env:USERPROFILE}\Desktop\PowerShell\get_vast_pod_info.ps1"
+$GetPodScriptPath = "get_vast_pod_info.ps1"
 $NvencFixSource   = "${env:USERPROFILE}\Desktop\PowerShell\nvenc_fix.c"
 $KeyPath          = "${env:USERPROFILE}\.ssh\id_ed25519"
 $SSHExe           = "C:\Windows\System32\OpenSSH\ssh.exe"
@@ -119,9 +119,9 @@ if ($targetExtension -in @('.webm', '.avi')) {
 $isEncodingTask = $targetExtension -in @('.mp4', '.mkv')
 
 if ($isEncodingTask) {
-    $StreamingScript = "${env:USERPROFILE}\Desktop\PowerShell\streaming_video.ps1"
+    $StreamingScript = "streaming_video.ps1"
 } else {
-    $StreamingScript = "${env:USERPROFILE}\Desktop\PowerShell\streaming_audio.ps1"
+    $StreamingScript = "streaming_audio.ps1"
 }
 
 if (-not (Test-Path -LiteralPath $StreamingScript)) {

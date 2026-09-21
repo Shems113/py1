@@ -25,7 +25,7 @@ $pythonCommonArgs = @(
 
 # --- Exécution ---
 if ($isStreaming) {
-    $streamingScript = "${env:USERPROFILE}\Desktop\PowerShell\streaming_audio.ps1"
+    $streamingScript = "streaming_audio.ps1"
     $inputFile       = "${env:USERPROFILE}\Videos\New\Windows\video\La norme d'un vecteur.mp4"
     $outputFile      = "D:\Result\Subtitle\La norme d'un vecteur.csv"
     # Utilisation des paramètres génériques :
