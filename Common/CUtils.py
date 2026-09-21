@@ -13,7 +13,7 @@ import time
 import pandas as pd
 import av
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, IO
+from typing import Any, BinaryIO, Callable, Dict, List, Optional, Set, Tuple, Union, IO
 import charset_normalizer
 import ffmpeg  # Importation propre et officielle du package ffmpeg-python
 from mutagen.aac import AAC
@@ -179,24 +179,54 @@ def add_audio_id3_images(
                 audio.add(apic)
     audio.save()
 
-def get_video_streams_and_chapters(file_path: Union[str, Path]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Récupère simultanément les flux vidéo/audio et les chapitres via un seul appel ffprobe."""
+def get_video_streams_and_chapters(
+    input_source: Union[str, Path, BinaryIO]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Récupère simultanément les flux vidéo/audio et les chapitres via ffprobe.
+    
+    Accepte un chemin de fichier (str/Path) ou un flux streaming (ex: sys.stdin.buffer).
+    """
     try:
-        probe_data = ffmpeg.probe(str(file_path), show_chapters=None)
+        if isinstance(input_source, (str, Path)):
+            probe_data = ffmpeg.probe(str(input_source), show_chapters=None)
+        else:
+            # Si input_source est un flux streaming (pipe SSH / bytes), on le passe sur stdin via subprocess
+            input_bytes = input_source.read() if hasattr(input_source, 'read') else input_source
+            cmd = [
+                'ffprobe', '-show_format', '-show_streams', '-show_chapters',
+                '-print_format', 'json', '-i', 'pipe:0'
+            ]
+            process = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            out, _ = process.communicate(input=input_bytes)
+            probe_data = json.loads(out.decode('utf-8'))
+
         streams = probe_data.get("streams", [])
         chapters = probe_data.get("chapters", [])
         return streams, chapters
-    except ffmpeg.Error:
+
+    except Exception:
         return [], []
 
-def get_video_corrupted_frames_info(file_path: Union[str, Path]) -> Dict[str, Any]:
-    """Décode tout le fichier avec PyAV, compte les frames invalides et calcule le ratio de corruption."""
+def get_video_corrupted_frames_info(
+    input_source: Union[str, Path, BinaryIO]
+) -> Dict[str, Any]:
+    """Décode le flux avec PyAV, compte les frames invalides et calcule le ratio de corruption.
+    
+    Accepte un chemin de fichier (str/Path) ou un flux streaming reçu par SSH (ex: sys.stdin.buffer).
+    """
     total_frames = 0
     corrupted_frames = 0
     first_error = None
 
     try:
-        container = av.open(str(file_path))
+        # PyAV accepte directement un objet fichier binaire (Stream / Pipe) ou un chemin string
+        if isinstance(input_source, (str, Path)):
+            container = av.open(str(input_source))
+        else:
+            container = av.open(input_source)
+
         stream = container.streams.video[0]
         
         # Parcours paquet par paquet pour continuer le scan même après une erreur

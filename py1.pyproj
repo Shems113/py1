@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{f361b985-6cb5-4376-83ea-e7a2e7b53dee}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>CVideoApp.py</StartupFile>
+    <StartupFile>Compile.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -51,14 +51,20 @@
     <Folder Include="Media\" />
     <Folder Include="Common\" />
     <Folder Include="MediaService\" />
+    <Folder Include="PowerShell\" />
     <Folder Include="Torrent\" />
     <Folder Include="Templates\" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Files\cmd.ps1" />
+    <Content Include="PowerShell\cmd.ps1" />
     <Content Include="Files\GmailApiSettings.json" />
     <Content Include="Files\LinuxSettings.json" />
     <Content Include="Files\WindowsSettings.json" />
+    <Content Include="PowerShell\get_vast_pod_info.ps1" />
+    <Content Include="PowerShell\linux_deploy_python.ps1" />
+    <Content Include="PowerShell\linux_streaming_transcription.ps1" />
+    <Content Include="PowerShell\streaming_audio.ps1" />
+    <Content Include="PowerShell\streaming_video.ps1" />
     <Content Include="requirements.txt" />
     <Content Include="Templates\index.html" />
     <Content Include="Torrent\CScraperYts.py" />

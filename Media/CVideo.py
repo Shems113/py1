@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import io
 from typing import Any, Dict, List, Union
 import numpy as np
 import pandas as pd
@@ -8,7 +9,7 @@ from Common.CUtils import (
     data_frame_from_csv,
     data_frame_to_csv,
     ensure_ffmpeg_available,
-    extract_mono_16khz_pcm_stream,  # <--- Nouvelle fonction importée
+    extract_mono_16khz_pcm_stream,
     format_timestamp,
     get_audio_id3_tags,
     get_audio_tags,
@@ -35,16 +36,34 @@ class CVideo(CMedia):
         self.whisper_model = CWhisperModel(
             logger=self.logger, model_size_or_path="large-v3"
         )
+        self.chunk_stream_size: int = 65536
 
     def read(self) -> None:
         """Lit les flux et métadonnées vidéo et les exporte sous forme de fichiers CSV."""
-        ensure_ffmpeg_available()
-        data = self.process_files_parallel(self._get_video_attributes_fields)
-        dfs = self.build_dataframes_by_codec(data)
-        self.export_dataframes_to_csv_by_codec(dfs)
+        if self.is_streaming:
+            frame_errors = {}
+            stream_buffer = io.BytesIO(self._chunk_input_stream())
+            if self.action_type == EActionType.ReadAndCheck:
+                frame_errors = self.logger.logElapsedTime(
+                    lambda: get_video_corrupted_frames_info(stream_buffer),
+                    "Video frames checking from input stream..."
+                )
+            
+            df = pd.DataFrame([frame_errors] if frame_errors else [])
+            data_frame_to_csv(
+                df=df,
+                target=sys.stdout,
+                separator=self.data_separator
+            )
+        else:
+            ensure_ffmpeg_available()
+            data = self.process_files_parallel(self._get_video_attributes_fields)
+            dfs = self.build_dataframes_by_codec(data)
+            self.export_dataframes_to_csv_by_codec(dfs)
 
     def _get_video_attributes_fields(
-        self, file_path: Union[str, Path]
+        self, 
+        file_path: Union[str, Path]
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Extrait les flux, chapitres et métadonnées d'un fichier vidéo/texte."""
         path_obj = Path(file_path)
@@ -57,32 +76,26 @@ class CVideo(CMedia):
         try:
             common_fields = get_file_common_fields(path_obj)
             streams, chapters = get_video_streams_and_chapters(path_obj)
-            frame_errors = (
-                self.logger.logElapsedTime(lambda : get_video_corrupted_frames_info(path_obj), f"Video frames checking of {path_obj}...")
-                if self.action_type == EActionType.ReadAndCheck 
-                else None
-                )
             
-            # Regroupement des flux par type de codec (video, audio, subtitle, etc.)
             for stream in streams:
                 codec_type = stream.get("codec_type")
                 if codec_type:
                     result.setdefault(codec_type, []).append(common_fields | stream)
 
-            # Traitement des chapitres
             if chapters:
                 result["videoChapters"] = [
                     common_fields | chap for chap in chapters
                 ]
 
-            # Vérification des erreurs des frames
-            if frame_errors:
-                result["frameErrors"] = [
-                    common_fields | frame_errors
-                ]
-
-            # Traitement des métadonnées additionnelles pour les vidéos
             if is_video(path_obj):
+                if self.action_type == EActionType.ReadAndCheck:
+                    frame_errors = self.logger.logElapsedTime(
+                        lambda: get_video_corrupted_frames_info(path_obj),
+                        f"Video frames checking of {path_obj}..."
+                    )
+                    if frame_errors:
+                        result["frameErrors"] = [common_fields | frame_errors]
+
                 audio_tags = dict(get_audio_tags(path_obj))
                 result["videoOther"] = [common_fields | audio_tags]
 
@@ -195,7 +208,6 @@ class CVideo(CMedia):
         try:
             self.logger.log(f"Extracting PCM stream from file: {path_obj.name}")
 
-            # Utilisation de la fonction d'extraction dédiée
             raw_pcm = extract_mono_16khz_pcm_stream(path_obj)
 
             if not raw_pcm:
@@ -204,7 +216,6 @@ class CVideo(CMedia):
                 )
                 return {}
 
-            # Passage du flux extrait à la méthode stream
             audio_transcription = self._transcribe_video_audio_stream(
                 stream_input=raw_pcm,
                 source_name=str(path_obj),
@@ -219,38 +230,21 @@ class CVideo(CMedia):
 
     def _transcribe_video_audio_stream(
         self,
-        stream_input: Union[bytes, None] = None,
-        chunk_size: int = 65536,
+        stream_input: bytes = None,
         source_name: str = "stdin",
     ) -> List[Dict[str, Any]]:
         """Lit un flux audio PCM 16-bit 16kHz Mono (depuis stdin ou un paramètre bytes) et exécute Whisper."""
-
-        # 1. Récupération des données binaire : soit transmises directement, soit lues depuis stdin
-        if stream_input is not None:
-            raw_data = stream_input
-        else:
-            self.logger.log("Reading streaming audio from stdin until EOF...")
-            stream = sys.stdin.buffer
-            chunks = []
-            while True:
-                chunk = stream.read(chunk_size)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            raw_data = b"".join(chunks)
-
-        # 2. Validation du payload PCM 16-bit brut
-        if not self._validate_raw_pcm_stream(raw_data):
+        if stream_input is None:
+            stream_input = self._chunk_input_stream()
+            
+        if not self._validate_raw_pcm_stream(stream_input):
             return []
 
-        # 3. Conversion PCM int16 -> float32 normalisé [-1.0, 1.0]
-        audio = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
+        audio = np.frombuffer(stream_input, dtype=np.int16).astype(np.float32) / 32768.0
 
-        # 4. Validation du tableau NumPy
         if not self._validate_audio_array(audio):
             return []
 
-        # 5. Appel UNIQUE du modèle Whisper
         segment_data = self.logger.logElapsedTime(
             lambda: self.whisper_model.get_file_transcription_data(
                 audio,
@@ -275,7 +269,6 @@ class CVideo(CMedia):
         if not segment_data:
             return []
 
-        # 6. Structuration des résultats
         is_file_source = source_name != "stdin"
 
         audio_transcription = [
@@ -294,6 +287,18 @@ class CVideo(CMedia):
 
         self.logger.log(f"Transcription successful for {source_name}")
         return audio_transcription
+
+    def _chunk_input_stream(self) -> bytes:
+        """Lit le flux binaire depuis stdin jusqu'à EOF."""
+        self.logger.log("Reading streaming from stdin until EOF...")
+        stream = sys.stdin.buffer
+        chunks = []
+        while True:
+            chunk = stream.read(self.chunk_stream_size)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks)
 
     def _validate_raw_pcm_stream(self, raw_data: bytes) -> bool:
         """Contrôle d'intégrité du buffer binaire PCM avant conversion."""
@@ -331,20 +336,18 @@ class CVideo(CMedia):
 
     def _get_data(
         self,
-        is_srt: int,
+        is_srt: bool,
         i: int, 
         seg: Dict[str, Any]
-        ) -> str:
+    ) -> str:
         self.logger.log(f"Get data of the segment {i} : {seg}")
 
         if is_srt:
             start = format_timestamp(seg["start"])
             end = format_timestamp(seg["end"])
             text = seg["text"].strip()
-        
-            # Rend littéralement : "1\n00:00:00,000 --> 00:00:02,000\nTexte du segment\n\n"
-            return f"{i + 1}\\n{start} --> {end}\\n{text}\\n\\n"
-            
+            return f"{i + 1}\n{start} --> {end}\n{text}\n\n"
+
         ffmpeg_cmd = [
             "ffmpeg",
             "-y",
