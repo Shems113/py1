@@ -14,6 +14,7 @@ from Common.CUtils import (
     get_audio_tags,
     get_file_common_fields,
     get_video_streams_and_chapters,
+    get_video_corrupted_frames_info,
     is_audio,
     is_text_file,
     is_video,
@@ -54,9 +55,14 @@ class CVideo(CMedia):
             return result
 
         try:
-            streams, chapters = get_video_streams_and_chapters(path_obj)
             common_fields = get_file_common_fields(path_obj)
-
+            streams, chapters = get_video_streams_and_chapters(path_obj)
+            frame_errors = (
+                self.logger.logElapsedTime(lambda : get_video_corrupted_frames_info(path_obj), f"Video frames checking of {path_obj}...")
+                if self.action_type == EActionType.ReadAndCheck 
+                else None
+                )
+            
             # Regroupement des flux par type de codec (video, audio, subtitle, etc.)
             for stream in streams:
                 codec_type = stream.get("codec_type")
@@ -67,6 +73,12 @@ class CVideo(CMedia):
             if chapters:
                 result["videoChapters"] = [
                     common_fields | chap for chap in chapters
+                ]
+
+            # Vérification des erreurs des frames
+            if frame_errors:
+                result["frameErrors"] = [
+                    common_fields | frame_errors
                 ]
 
             # Traitement des métadonnées additionnelles pour les vidéos

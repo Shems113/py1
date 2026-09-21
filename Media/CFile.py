@@ -85,7 +85,6 @@ class CFile(CMedia):
                     target_dir,
                     file_name_func,
                     is_same_media_func,
-                    index=0,
                     is_move=is_move,
                 )
 

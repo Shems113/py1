@@ -111,11 +111,10 @@ class CTorrentDownloader:
 
 
 if __name__ == "__main__":
+    url='magnet:?xt=urn:btih:12eb9d0f0cac75c9ff2c2477cef1ede0885bf89e&dn=%5BTsundere-Raws%5D%20Saint%20Seiya%20-%20Knights%20of%20the%20Zodiac%20%281986%29%20-%20Int%C3%A9gral%20VOSTFR%20%5BWEB%201080p%20x264%20AAC%5D&tr=http%3A%2F%2Fnyaa.tracker.wf%3A7777%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce'
     MAGNET_DATA = {
-        'magnet:?xt=urn:btih:8B5A846FF78640D324AA0A01F3E180854468E083&dn=Blade.Runner.2049.2017.WEB-DL.1080p.6ch.x265.10bit.%5bS-Less%5d': '335984',
-        'magnet:?xt=urn:btih:ADE12F74D9B74DEA26AD7C88B2C42FE02399CB59&dn=Dune%202021%201080p%2010bit%20BluRay%208CH%20x265%20HEVC-PSA': '438631',
-        'magnet:?xt=urn:btih:d36586c7ac43f22b1dd5566b79dc7b8bc04f5c21&dn=Arrival (2016) x 1608 (2160p) HDR 5.1 x265 10bit Phun Psyz.mkv': '329865'
-    }
+        url: 'SAINT SEIYA',
+        }
 
     OUTPUT_FOLDER = r"C:\Users\SEDOUD\Videos\New\Torrent"
 

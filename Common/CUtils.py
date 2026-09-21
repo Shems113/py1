@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import pandas as pd
+import av
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, IO
 import charset_normalizer
@@ -45,7 +46,6 @@ WORD_FORMAT_EXTENSIONS = {
     17: ".pdf",
 }
 
-_FFMPEG_CHECKED = False
 _DECIMAL_SEPARATOR: Optional[str] = None
 
 
@@ -68,7 +68,6 @@ def get_ffmpeg_version() -> str:
 
 def ensure_ffmpeg_available(verbose: bool = True) -> Optional[str]:
     """Vérifie la présence de ffmpeg."""
-    global _FFMPEG_CHECKED
     ffmpeg_path = shutil.which("ffmpeg")
     if verbose:
         print("Lien de ffmpeg : ", ffmpeg_path)
@@ -76,7 +75,6 @@ def ensure_ffmpeg_available(verbose: bool = True) -> Optional[str]:
             print("Version de ffmpeg : ", get_ffmpeg_version())
         else:
             print("Version de ffmpeg : ffmpeg introuvable dans le PATH")
-    _FFMPEG_CHECKED = True
     return ffmpeg_path
 
 
@@ -181,10 +179,7 @@ def add_audio_id3_images(
                 audio.add(apic)
     audio.save()
 
-
-def get_video_streams_and_chapters(
-    file_path: Union[str, Path]
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def get_video_streams_and_chapters(file_path: Union[str, Path]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Récupère simultanément les flux vidéo/audio et les chapitres via un seul appel ffprobe."""
     try:
         probe_data = ffmpeg.probe(str(file_path), show_chapters=None)
@@ -194,6 +189,44 @@ def get_video_streams_and_chapters(
     except ffmpeg.Error:
         return [], []
 
+def get_video_corrupted_frames_info(file_path: Union[str, Path]) -> Dict[str, Any]:
+    """Décode tout le fichier avec PyAV, compte les frames invalides et calcule le ratio de corruption."""
+    total_frames = 0
+    corrupted_frames = 0
+    first_error = None
+
+    try:
+        container = av.open(str(file_path))
+        stream = container.streams.video[0]
+        
+        # Parcours paquet par paquet pour continuer le scan même après une erreur
+        for packet in container.demux(stream):
+            try:
+                for frame in packet.decode():
+                    total_frames += 1
+            except av.FFmpegError as e:
+                corrupted_frames += 1
+                if not first_error:
+                    first_error = str(e)
+
+    except Exception as e:
+        return {
+            "total_frames": 0,
+            "error": f"Erreur ouverture/I-O: {str(e)}", 
+            "corrupted_count": None,
+            "corruption_ratio": 0.0,
+        }
+
+    # Calcul du ratio
+    processed_total = total_frames + corrupted_frames
+    ratio = (corrupted_frames / processed_total) if processed_total > 0 else 0.0
+
+    return {
+        "total_frames": processed_total,
+        "error": first_error,
+        "corrupted_count": corrupted_frames,
+        "corruption_ratio": round(ratio, 4),  # ex: 0.0345
+    }
 
 def is_media_type(file_path: Union[str, Path], media_type: str) -> bool:
     """Vérifie si le type MIME commence par le préfixe spécifié (ex: 'audio', 'video')."""

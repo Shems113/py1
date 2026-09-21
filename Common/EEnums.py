@@ -12,10 +12,11 @@ class EActionType(Enum):
     Read=1
     ReadAndMove=2
     ReadAndCopy=3
-    Write=4
-    Bookmark=5
-    Transcribe=6
-    TranscribeAndCheck=7
+    ReadAndCheck=4
+    Write=5
+    Bookmark=6
+    Transcribe=7
+    TranscribeAndCheck=8
 
 class ETorrentSource(str, Enum):
     ALL = "All"

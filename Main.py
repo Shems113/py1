@@ -12,7 +12,7 @@ from Media.CVideo import CVideo as Video
 from Media.CWord import CWord as Word
 
 # Valeurs par défaut
-DEFAULT_MEDIA = EMediaType.Subtitle
+DEFAULT_MEDIA = EMediaType.Video
 DEFAULT_ACTION = EActionType.Read
 
 # Mappings des classes de médias et des actions associées
@@ -29,6 +29,7 @@ ACTION_MAPPING: Dict[EActionType, str] = {
     EActionType.Read: "read",
     EActionType.ReadAndMove: "read",
     EActionType.ReadAndCopy: "read",
+    EActionType.ReadAndCheck: "read",
     EActionType.Write: "write",
     EActionType.Bookmark: "bookmark",
     EActionType.Transcribe: "transcribe",
