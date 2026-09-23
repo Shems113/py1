@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{f361b985-6cb5-4376-83ea-e7a2e7b53dee}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>Compile.py</StartupFile>
+    <StartupFile>CVideoApp.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -22,11 +22,19 @@
   <ItemGroup>
     <Compile Include="Common\CLazy.py" />
     <Compile Include="Common\CWhisperModel.py" />
+    <Compile Include="Common\Helpers\Audio.py" />
+    <Compile Include="Common\Helpers\Dataframe.py" />
+    <Compile Include="Common\Helpers\File.py" />
+    <Compile Include="Common\Helpers\HTML.py" />
+    <Compile Include="Common\Helpers\Json.py" />
+    <Compile Include="Common\Helpers\Media.py" />
+    <Compile Include="Common\Helpers\Other.py" />
+    <Compile Include="Common\Helpers\Torrent.py" />
+    <Compile Include="Common\Helpers\Video.py" />
     <Compile Include="Compile.py" />
     <Compile Include="MediaService\CBitport.py" />
     <Compile Include="MediaService\COpenSubtitles.py" />
     <Compile Include="MediaService\CTmdb.py" />
-    <Compile Include="Common\Helper.py" />
     <Compile Include="Media\CFile.py" />
     <Compile Include="Media\CGmail.py" />
     <Compile Include="Media\CMusic.py" />
@@ -36,7 +44,6 @@
     <Compile Include="Common\EEnums.py" />
     <Compile Include="Media\CMedia.py" />
     <Compile Include="Common\CLogger.py" />
-    <Compile Include="Common\CUtils.py" />
     <Compile Include="Main.py" />
     <Compile Include="CVideoApp.py" />
     <Compile Include="Torrent\CScraperLimeTorrents.py" />
@@ -47,6 +54,7 @@
     <Compile Include="Torrent\CTorrentManager.py" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="Common\Helpers\" />
     <Folder Include="Files\" />
     <Folder Include="Media\" />
     <Folder Include="Common\" />
@@ -62,9 +70,7 @@
     <Content Include="Files\WindowsSettings.json" />
     <Content Include="PowerShell\get_vast_pod_info.ps1" />
     <Content Include="PowerShell\linux_deploy_python.ps1" />
-    <Content Include="PowerShell\linux_streaming_transcription.ps1" />
-    <Content Include="PowerShell\streaming_audio.ps1" />
-    <Content Include="PowerShell\streaming_video.ps1" />
+    <Content Include="PowerShell\linux_streaming.ps1" />
     <Content Include="requirements.txt" />
     <Content Include="Templates\index.html" />
     <Content Include="Torrent\CScraperYts.py" />

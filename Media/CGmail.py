@@ -1,34 +1,31 @@
 import base64
 import json
+import typing
 from collections import defaultdict
 from email.utils import parseaddr
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
+from Common.EEnums import EActionType, EMediaType
+from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
+from Common.Helpers.File import clean_file_name, get_file_name_extension
+from Common.Helpers.Json import (
+    json_from_file,
+    json_to_file,
+)
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
-
-from Common.CUtils import (
-    clean_file_name,
-    data_frame_from_csv,
-    data_frame_to_csv,
-    get_file_name_extension,
-    json_from_file,
-    json_to_file,
-)
-from Common.EEnums import EActionType, EMediaType
 from Media.CMedia import CMedia
 
 
 class CGmail(CMedia):
     USER_ID = "me"
     LIST_MESSAGE_MAX_RESULTS = 500
-    SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-    MESSAGE_HEADERS = [
+    SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]  # noqa: RUF012
+    MESSAGE_HEADERS = [  # noqa: RUF012
         "Date",
         "From",
         "To",
@@ -40,14 +37,14 @@ class CGmail(CMedia):
     ]
 
     def __init__(
-        self, 
-        json_path: Union[str, Path],
+        self,
+        json_path: str | Path,
         action_type: EActionType
     ) -> None:
         super().__init__(json_path, EMediaType.Gmail, action_type)
-        self.gmail_api_service: Optional[Resource] = self._call_gmail_api_service()
+        self.gmail_api_service: Resource | None = self._call_gmail_api_service()
 
-    def _call_gmail_api_service(self) -> Optional[Resource]:
+    def _call_gmail_api_service(self) -> Resource | None:
         """Authentifie l'utilisateur et initialise le service de l'API Gmail."""
         if not self.source_path or not self.source_path.is_file():
             self.logger.logError(
@@ -94,10 +91,10 @@ class CGmail(CMedia):
             )
             return
 
-        dfs= self._build_dataframes()
+        dfs = self._build_dataframes()
         self.export_dataframes_to_csv_by_codec(dfs)
 
-    def _build_dataframes(self) -> Dict[str, pd.DataFrame]:
+    def _build_dataframes(self) -> dict[str, pd.DataFrame]:
         """Construit les DataFrames résumant les labels et la liste des messages."""
         results = {}
         for data_type, func in [("gmailLabel",self._list_labels), ("gmailMessage", self._list_messages)]:
@@ -126,8 +123,8 @@ class CGmail(CMedia):
         return pd.DataFrame(response.get("labels", []))
 
     def _list_messages(
-        self, 
-        label_ids: Optional[List[str]] = None
+        self,
+        label_ids: list[str] | None = None
     ) -> pd.DataFrame:
         """Récupère la liste complète des messages correspondant au motif avec pagination."""
         if not self.gmail_api_service:
@@ -175,14 +172,14 @@ class CGmail(CMedia):
             csv_path = target_dir / f"{key}.csv"
 
             def export_csv() -> None:
-                data_frame_to_csv(df, csv_path, self.data_separator)
+                data_frame_to_csv(df, csv_path, self.data_separator)  # noqa: B023
 
             self.logger.logElapsedTime(export_csv, f"Display {key}")
 
     def _build_dataframes_details(
-        self, 
+        self,
         df_source: pd.DataFrame
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """Extrait les détails et pièces jointes de chaque message identifié."""
         if df_source.empty or "id" not in df_source.columns:
             return {"gmailMessageDetailsResult": pd.DataFrame()}
@@ -193,7 +190,7 @@ class CGmail(CMedia):
         for message_id in unique_ids:
             try:
                 message_details.append(self._get_message_details(message_id))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 self.logger.logError(
                     f"An error occurred with message Id {message_id} : {e}"
                 )
@@ -223,9 +220,9 @@ class CGmail(CMedia):
         return {"gmailMessageDetailsResult": df_result}
 
     def _get_message_details(
-        self, 
+        self,
         message_id: str
-        ) -> Dict[str, Any]:
+        ) -> dict[str, typing.Any]:
         """Récupère le détail complet d'un message donné via son identifiant."""
         if not self.gmail_api_service:
             return {}
@@ -239,7 +236,7 @@ class CGmail(CMedia):
         payload = response.get("payload", {})
 
         # Traitement des en-têtes HTTP/MIME
-        raw_headers: Dict[str, List[str]] = defaultdict(list)
+        raw_headers: dict[str, list[str]] = defaultdict(list)
         for header_elem in payload.get("headers", []):
             name = header_elem.get("name", "empty")
             value = header_elem.get("value", "")
@@ -270,15 +267,15 @@ class CGmail(CMedia):
         message_id: str,
         from_email: str,
         to_email: str,
-        parts: List[Dict[str, Any]],
-    ) -> List[str]:
+        parts: list[dict[str, typing.Any]],
+    ) -> list[str]:
         """Télécharge et enregistre localement les pièces jointes associées à un message."""
         if not self.gmail_api_service:
             return []
 
         saved_file_paths = []
 
-        def extract_parts(parts_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        def extract_parts(parts_list: list[dict[str, typing.Any]]) -> list[dict[str, typing.Any]]:
             """Extrait récursivement toutes les pièces jointes imbriquées."""
             extracted = []
             for part in parts_list:

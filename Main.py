@@ -1,7 +1,6 @@
 import argparse
-from pathlib import Path
 import platform
-from typing import Dict, Type, Union
+from pathlib import Path
 
 from Common.EEnums import EActionType, EMediaType
 from Media.CFile import CFile as File
@@ -12,11 +11,11 @@ from Media.CVideo import CVideo as Video
 from Media.CWord import CWord as Word
 
 # Valeurs par défaut
-DEFAULT_MEDIA = EMediaType.Video
+DEFAULT_MEDIA = EMediaType.Gmail
 DEFAULT_ACTION = EActionType.Read
 
 # Mappings des classes de médias et des actions associées
-MEDIA_MAPPING: Dict[EMediaType, Type] = {
+MEDIA_MAPPING: dict[EMediaType, type] = {
     EMediaType.File: File,
     EMediaType.Gmail: Gmail,
     EMediaType.Music: Music,
@@ -25,7 +24,7 @@ MEDIA_MAPPING: Dict[EMediaType, Type] = {
     EMediaType.Word: Word,
 }
 
-ACTION_MAPPING: Dict[EActionType, str] = {
+ACTION_MAPPING: dict[EActionType, str] = {
     EActionType.Read: "read",
     EActionType.ReadAndMove: "read",
     EActionType.ReadAndCopy: "read",
@@ -36,9 +35,8 @@ ACTION_MAPPING: Dict[EActionType, str] = {
     EActionType.TranscribeAndCheck: "transcribeAndCheck",
 }
 
-
 def process(
-    media: Union[File, Gmail, Music, Video, Word], action_name: str
+    media: File | Gmail | Music | Video | Word, action_name: str
 ) -> None:
     """Initialise les logs et exécute la méthode d'action sur l'instance de média."""
     if hasattr(media, action_name) and callable(getattr(media, action_name)):

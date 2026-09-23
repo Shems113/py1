@@ -1,43 +1,8 @@
-import numpy as np
-import os
 import re
-import regex as reg
-import urllib.parse
-from typing import List, Optional
+
+import numpy as np
 import pandas as pd
-import requests
 
-
-def check_required_env_vars(service_name: str, var_names: List[str]) -> List[str]:
-    """Vérifie que les variables d'environnement requises sont bien définies.
-
-    Affiche un avertissement si certaines sont manquantes et retourne la liste
-    des variables non renseignées.
-    """
-    missing = [name for name in var_names if not os.getenv(name)]
-    if missing:
-        print(
-            f"⚠️  [{service_name}] Variable(s) d'environnement manquante(s) : {', '.join(missing)}."
-        )
-    return missing
-
-
-def handle_response(response: requests.Response, include_json: bool = False) -> dict:
-    """Affiche le statut HTTP de la réponse et retourne son contenu JSON.
-
-    Si la requête a échoué ou ne contient pas de JSON valide, retourne un dictionnaire vide.
-    """
-    status = "OK" if response.ok else "KO"
-    print(f"{status} : {response.status_code}")
-    data = response.json() if response.ok else {}
-    if include_json and response.ok:
-        print(data)
-    return data
-
-def _concat_unique_data(series: pd.Series) -> str:
-    """Concatène les valeurs uniques non nuls d'une série Pandas."""
-    unique_vals = series.dropna().unique()
-    return " | ".join(str(v) for v in unique_vals if v)
 
 def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
     """Filtre et classe un DataFrame de torrents pour sélectionner la meilleure option par film.
@@ -81,7 +46,7 @@ def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
         df.loc[mask, "quality_rank"] = rank
 
     # 3. Extraction du hash dans une nouvelle colonne temporaire
-    df["magnet_hash"] = df["magnet"].apply(extract_magnet_hash)
+    df["magnet_hash"] = df["magnet"].apply(_extract_magnet_hash)
 
     # 4. Agrégation par version de torrent
     df_agg = df.groupby(
@@ -192,51 +157,31 @@ def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
 
     return df_agg[output_cols]
 
-def parse_int(value: str) -> int:
-    """Extrait un entier depuis une chaîne (ex: '1 250 seeds' -> 1250).
+def _concat_unique_data(series: pd.Series) -> str:
+    """Concatène les valeurs uniques non nuls d'une série Pandas."""
+    unique_vals = series.dropna().unique()
+    return " | ".join(str(v) for v in unique_vals if v)
 
-    Retourne 0 si l'extraction échoue.
-    """
-    try:
-        return int(re.sub(r"[^\d]", "", str(value)))
-    except (ValueError, TypeError):
-        return 0
+def _extract_magnet_hash(magnet_link: str) -> str | None:
+    """Extrait le Info Hash (BTIH) d'un lien magnet et le met en minuscules."""
+    if not isinstance(magnet_link, str):
+        return None
 
-
-def parse_size(text: str) -> str:
-    """Extrait et normalise la taille d'un fichier depuis du texte brut HTML.
-
-    Gère les suffixes d'unités (KB, MB, GB, TiB...) et les préfixes de mots-clés (Size, Taille).
-    """
-    if not text or text == "N/A":
-        return "N/A"
-
-    size_pattern = re.search(
-        r'(?:Size|Taille|Length)\b[\s:]*([\d\,\.]+)\s*([KMGTkmgt]i?[Bb])',
-        text,
-        re.IGNORECASE
+    # Capture le hash hexadécimal (40 car.) ou Base32 (32 car.)
+    match = re.search(
+        r"xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})", magnet_link
     )
-    if size_pattern:
-        raw_val, unit = size_pattern.groups()
-        try:
-            val = float(raw_val.replace(',', '.'))
-            return f"{val:g} {unit.upper().replace('IB', 'iB')}"
-        except ValueError:
-            return f"{raw_val} {unit}"
+    return match.group(1).lower() if match else None
 
-    fallback_pattern = re.search(r'(\d+(?:[\,\.]\d+)?)\s*([KMGTkmgt]i?[Bb])', text)
-    if fallback_pattern:
-        raw_val, unit = fallback_pattern.groups()
-        try:
-            val = float(raw_val.replace(',', '.'))
-            return f"{val:g} {unit.upper().replace('IB', 'iB')}"
-        except ValueError:
-            return f"{raw_val} {unit}"
+def is_same_magnet(
+    link1: str,
+    link2: str) -> bool:
+    """Vérifie si deux liens magnet pointent vers le même torrent."""
+    h1 = _extract_magnet_hash(link1)
+    h2 = _extract_magnet_hash(link2)
+    return h1 is not None and h1 == h2
 
-    return "N/A"
-
-
-def parse_quality(title: str) -> str:
+def parse_quality_torrent(title: str) -> str:
     """Analyse le titre d'une release pour détecter sa qualité ou résolution (ex: 1080p, Bluray, WEB)."""
     patterns = [
         # 1. Résolutions explicites précises (conservées intactes)
@@ -265,80 +210,4 @@ def parse_quality(title: str) -> str:
     return "N/A"
 
 
-def parse_tpb_date(text: str) -> str:
-    """Extrait la date de publication spécifique aux éléments de The Pirate Bay."""
-    match = re.search(r"Uploaded\s+([\d\-\:\s\w]+?),", text, re.IGNORECASE)
-    return match.group(1).strip() if match else "N/A"
 
-
-def build_absolute_url(base_url: str, path: str) -> str:
-    """Convertit un lien relatif (ex: '/torrent/123') en URL absolue avec le domaine racine de base_url."""
-    if not path or path.startswith("http"):
-        return path or "N/A"
-    base_domain = "/".join(base_url.split("/")[:3])
-    return f"{base_domain}{path}" if path.startswith("/") else f"{base_domain}/{path}"
-
-
-def extract_magnet_from_html(html_str: str, title: str = "", trackers: Optional[List[str]] = None) -> str:
-    """Recherche un InfoHash ou un hash hexadécimal dans du code HTML et reconstruit un lien magnet complet."""
-    trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in (trackers or []))
-    title_str = f"&dn={urllib.parse.quote(title)}" if title else ""
-
-    hash_match = re.search(
-        r"(?:hash|btih|torrent_hash|data-hash)[=:\s'\"]+([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})",
-        html_str,
-        re.IGNORECASE,
-    )
-    if hash_match:
-        return f"magnet:?xt=urn:btih:{hash_match.group(1)}{title_str}{trackers_str}"
-
-    hex_match = re.search(r"\b([a-fA-F0-9]{40})\b", html_str)
-    if hex_match:
-        return f"magnet:?xt=urn:btih:{hex_match.group(1)}{title_str}{trackers_str}"
-
-    return "N/A"
-
-
-def clean_query(query: str) -> str:
-    """Nettoie une chaîne de recherche en supprimant la ponctuation gênante (deux-points, tirets, etc.)."""
-    q = re.sub(r'[:\'\-_]', ' ', query)
-    return ' '.join(q.split())
-
-
-def get_mirrors_from_env(env_var: str, defaults: List[str]) -> List[str]:
-    """Récupère une liste de miroirs depuis une variable d'environnement (séparés par des virgules).
-
-    Si la variable est absente ou vide, retourne la liste de miroirs par défaut.
-    """
-    override = os.getenv(env_var)
-    if override:
-        mirrors = [m.strip() for m in override.split(",") if m.strip()]
-        if mirrors:
-            return mirrors
-    return defaults
-
-def is_latin(texte: str) -> bool:
-    # Autorise les caractères de script Latin, les chiffres, la ponctuation et les symboles typographiques
-    # Rejette uniquement si un caractère alphabétique N'EST PAS du Latin (ex: Chinois, Arabe, Cyrillique)
-    for char in texte:
-        if char.isalpha() and not reg.match(r'\p{Script=Latin}', char):
-            return False
-    return True
-
-def extract_magnet_hash(magnet_link: str) -> Optional[str]:
-    """Extrait le Info Hash (BTIH) d'un lien magnet et le met en minuscules."""
-    if not isinstance(magnet_link, str):
-        return None
-
-    # Capture le hash hexadécimal (40 car.) ou Base32 (32 car.)
-    match = re.search(
-        r"xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})", magnet_link
-    )
-    return match.group(1).lower() if match else None
-
-
-def is_same_magnet(link1: str, link2: str) -> bool:
-    """Vérifie si deux liens magnet pointent vers le même torrent."""
-    h1 = extract_magnet_hash(link1)
-    h2 = extract_magnet_hash(link2)
-    return h1 is not None and h1 == h2

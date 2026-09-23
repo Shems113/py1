@@ -1,37 +1,37 @@
 import threading
 import webbrowser
 from pathlib import Path
-from typing import Dict, Union
 
 from flask import Flask, jsonify, redirect, render_template, request
-
 from MediaService.CBitport import CBitport
 from MediaService.COpenSubtitles import COpenSubtitles
 from MediaService.CTmdb import CTmdb
 from Torrent.CTorrentManager import CTorrentManager
 
+
 class CVideoApp:
     """Application web Flask pour la gestion et le traitement de médias via CSV."""
 
     def __init__(
-        self, 
-        input_dir: Union[str, Path] = r"D:\Result\Film"):
-        # Instanciation des services
-        self.bitport = CBitport()
-        self.opensubtitles = COpenSubtitles()
-        self.tmdb = CTmdb()
-        self.torrent_manager = CTorrentManager()
-
+        self,
+        input_dir: str | Path = r"D:\Result\Film"):
         # Configuration des chemins d'accès
         self.input_directory = Path(input_dir)
         self.input_directory.mkdir(parents=True, exist_ok=True)
 
-        self.csv_paths: Dict[str, Path] = {
+        # Instanciation des services
+        self.torrent_manager = CTorrentManager([str(self.input_directory / "Logs.csv")])
+        logger=self.torrent_manager.logger
+        self.bitport = CBitport(logger)
+        self.opensubtitles = COpenSubtitles(logger)
+        self.tmdb = CTmdb(logger)
+        
+        self.csv_paths: dict[str, Path] = {
             "films": self.input_directory / "MesFilms.csv",
             "films_torrents": self.input_directory / "MesFilmsTorrents.csv",
             "films_subtitles": self.input_directory / "MesFilmsSubtitles.csv",
             "tv_shows": self.input_directory / "MesSeriesTV.csv",
-            "output": self.input_directory / "Output.csv",
+            "output": self.input_directory / "Output.csv"
         }
 
         # Initialisation de l'application Flask
@@ -61,7 +61,7 @@ class CVideoApp:
                 redirect("/")
             )[1]
 
-         # ----------------------------------------------------------------------
+        # ------------------------------------------------------------------------
 
         @self.app.route("/getTmdbTokenRequest", endpoint="get_tmdb_token_request")
         def get_tmdb_token_request():

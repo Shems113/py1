@@ -1,33 +1,27 @@
-from datetime import datetime
-import logging
 import urllib.parse
-from typing import List
+from datetime import datetime
 
+from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
-from Common.Helper import (
-    clean_query,
-    get_mirrors_from_env,
-    parse_int,
-    parse_quality,
-)
+from Common.Helpers.HTML import parse_int
+from Common.Helpers.Other import clean_query, get_mirrors_from_env
+from Common.Helpers.Torrent import parse_quality_torrent
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
-
-logger = logging.getLogger(__name__)
 
 
 class CScraperThePirateBay(CCommonTorrent):
-    def __init__(self):
+    def __init__(self,logger:Logger):
         mirrors = get_mirrors_from_env(
             "THEPIRATEBAY_MIRRORS",
             ["https://apibay.org"],
         )
-        super().__init__(mirrors)
+        super().__init__(mirrors,logger=logger)
 
     @property
     def source_name(self) -> str:
         return TorrentSource.THEPIRATEBAY.value
 
-    def search(self, query: str) -> List[TorrentResult]:
+    def search(self, query: str) -> list[TorrentResult]:
         encoded = urllib.parse.quote(clean_query(query))
         url = f"https://apibay.org/q.php?q={encoded}"
         trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in self.trackers)
@@ -60,7 +54,7 @@ class CScraperThePirateBay(CCommonTorrent):
                 # Fix Date : conversion du Timestamp UNIX (int) vers YYYY-MM-DD
                 raw_added = parse_int(item.get("added", 0))
                 if raw_added and raw_added > 0:
-                    formatted_date = datetime.fromtimestamp(raw_added).strftime("%Y-%m-%d")
+                    formatted_date = datetime.fromtimestamp(raw_added).astimezone().strftime("%Y-%m-%d")
                 else:
                     formatted_date = "N/A"
 
@@ -68,7 +62,7 @@ class CScraperThePirateBay(CCommonTorrent):
                     TorrentResult(
                         source=self.source_name,
                         title=title,
-                        quality=parse_quality(title),
+                        quality=parse_quality_torrent(title),
                         seeds=parse_int(item.get("seeders", 0)) or 0,
                         leechs=parse_int(item.get("leechers", 0)) or 0,
                         size=formatted_size,
@@ -78,8 +72,8 @@ class CScraperThePirateBay(CCommonTorrent):
                     )
                 )
             return results
-        except Exception as e:
-            logger.debug(f"Erreur API TPB: {e}")
+        except Exception as e:  # noqa: BLE001
+            self.logger.logError(f"Erreur API TPB: {e}")
             return []
 
     @staticmethod

@@ -1,24 +1,21 @@
 import os
 import urllib.parse
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import pandas as pd
 import requests
-
-from Common.CUtils import (
-    data_frame_from_csv,
-    data_frame_to_csv
-)
-from Common.Helper import (
-    check_required_env_vars,
-    handle_response,
-    select_best_quality_torrent,
-)
+from Common.CLogger import CLogger as Logger
+from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
+from Common.Helpers.Other import check_required_env_vars, handle_response
+from Common.Helpers.Torrent import select_best_quality_torrent
 
 
 class CBitport:
-    def __init__(self):
+    def __init__(
+        self,
+        logger:Logger
+        ):
         # Avertissement explicite et immédiat si les credentials sont absents, plutôt
         # que de laisser échouer silencieusement le premier appel API (401/403 opaque).
         # BITPORT_ACCESS_TOKEN n'est volontairement pas listé ici : il peut être obtenu
@@ -29,8 +26,9 @@ class CBitport:
         bitport_client_id=155811867
         bitport_client_secret='chpff96gnt9nbf74gk'
         bitport_access_token='7d0982d8f7c936136b863572c14be3f3ce2a306c'
+        self.logger = logger
         # Utilisation de variables d'environnement sans valeurs d'API sensibles en clair
-        self.bitport_client_id = os.getenv("BITPORT_CLIENT_ID", bitport_client_id)
+        self.bitport_client_id = os.getenv("BITPORT_CLIENT_ID", str(bitport_client_id))
         self.bitport_client_secret = os.getenv("BITPORT_CLIENT_SECRET", bitport_client_secret)
         self.bitport_access_token = os.getenv("BITPORT_ACCESS_TOKEN", bitport_access_token)
         self.bitport_redirect_url = "http://localhost:5000/callback"
@@ -53,9 +51,9 @@ class CBitport:
     # --- Authentification & OAuth2 ---
 
     def callback_bitport_access_token(
-        self, 
+        self,
         code: str
-        ) -> str:
+        ) -> dict[str, Any]:
         """Échange le code reçu lors de la redirection OAuth contre un Access Token et un Refresh Token."""
         url = f"{self.bitport_base_url}/oauth2/access-token"
         payload = {
@@ -66,7 +64,7 @@ class CBitport:
             "redirect_uri": self.bitport_redirect_url,
         }
 
-        res = requests.post(url, data=payload)
+        res = requests.post(url, data=payload ,timeout=30)
         json_data = handle_response(res) or {}
         access_token = json_data.get("access_token")
 
@@ -79,9 +77,9 @@ class CBitport:
         return json_data
 
     def refresh_access_token(
-        self, 
+        self,
         refresh_token: str
-        ) -> Dict[str, Any]:
+        ) -> dict[str, Any]:
         """Renouvelle le jeton d'accès sans re-passer par le navigateur."""
         url = f"{self.bitport_base_url}/oauth2/access-token"
         payload = {
@@ -91,7 +89,7 @@ class CBitport:
             "refresh_token": refresh_token,
         }
 
-        res = requests.post(url, data=payload)
+        res = requests.post(url, data=payload , timeout=30)
         json_data = handle_response(res) or {}
 
         tokens = json_data.get("data", {})
@@ -102,22 +100,22 @@ class CBitport:
             self.bitport_session.headers.update(
                 {"Authorization": f"Bearer {new_access_token}"}
             )
-            print("Nouveau jeton d'accès Bitport mis à jour avec succès.")
+            self.logger.log("Nouveau jeton d'accès Bitport mis à jour avec succès.")
 
         return tokens
 
     # --- Endpoints Cloud & Action ---
 
-    def discover_bitport_cloud_folders(self) -> Dict[str, Any]:
+    def discover_bitport_cloud_folders(self) -> dict[str, Any]:
         """Récupère l'arborescence complète des dossiers sur Bitport."""
         url = f"{self.bitport_base_url}/cloud/byPath"
         res = self.bitport_session.get(url, params={"scope": "recursive"})
         return handle_response(res) or {}
 
     def discover_bitport_cloud_videos(
-        self, 
-        outputFile: Optional[Union[str, Path]] = None
-    ) -> Dict[str, Any]:
+        self,
+        outputFile: str | Path | None = None
+    ) -> dict[str, Any]:
         """Récupère la liste de toutes les vidéos sur le cloud et l'exporte éventuellement en CSV."""
         url = f"{self.bitport_base_url}/cloud/all-videos"
         res = handle_response(self.bitport_session.get(url)) or {}
@@ -125,7 +123,7 @@ class CBitport:
         # files_data = (
         #     res.get("data", {"files": []}).get("files", []) if isinstance(res, dict) else []
         # )
-        
+
         # L'export CSV ne s'exécute que si un chemin de sortie est fourni
         if res and outputFile:
             df_files = pd.json_normalize(res,record_path=['data','files'])
@@ -134,8 +132,8 @@ class CBitport:
         return res
 
     def create_film_folders_in_bitport(
-        self, 
-        inputFile: Union[str, Path]
+        self,
+        inputFile: str | Path
         ) -> bool:
         """Crée les dossiers manquants sur Bitport à partir d'un fichier CSV d'entrée."""
         cloud_folders = self.discover_bitport_cloud_folders()
@@ -145,7 +143,7 @@ class CBitport:
         root_code = root_data.get("code")
 
         if not root_code:
-            print("Erreur: Impossible de trouver le dossier 'root' sur Bitport.")
+            self.logger.logError("Erreur: Impossible de trouver le dossier 'root' sur Bitport.")
             return False
 
         existing_folders = {
@@ -155,9 +153,9 @@ class CBitport:
         df_input = data_frame_from_csv(inputFile, ";")
         for col in ["tmdb_id", "name"]:
             if col not in df_input.columns:
-                print(f"Erreur: Le fichier d'entrée doit contenir une colonne '{col}'.")
+                self.logger.logError(f"Erreur: Le fichier d'entrée doit contenir une colonne '{col}'.")
                 return False
-        
+
         unique_folder_names = (
             (df_input["name"].str.strip() + "_" + df_input["tmdb_id"].astype('string')).dropna().unique()
         )
@@ -166,7 +164,7 @@ class CBitport:
             if not folder_name or folder_name in existing_folders:
                 continue
 
-            print(f"Création du dossier Bitport : {folder_name}")
+            self.logger.log(f"Création du dossier Bitport : {folder_name}")
             url = f"{self.bitport_base_url}/cloud/{root_code}"
             res = self.bitport_session.post(url, data={"name": folder_name})
             if res.status_code in (200, 201):
@@ -175,16 +173,16 @@ class CBitport:
         return True
 
     def transfer_torrents_to_bitport(
-        self, 
-        inputFile: Union[str, Path], 
-        outputFile: Union[str, Path]
+        self,
+        inputFile: str | Path,
+        outputFile: str | Path
     ) -> bool:
         """Sélectionne les meilleurs torrents et lance leurs transferts vers les dossiers Bitport correspondants."""
         df_input = data_frame_from_csv(inputFile, ";")
         df_best = select_best_quality_torrent(df_input)
 
         if df_best.empty:
-            print("Aucun torrent sélectionné pour le transfert.")
+            self.logger.log("Aucun torrent sélectionné pour le transfert.")
             return False
 
         data_frame_to_csv(df_best, outputFile, ";")
@@ -218,12 +216,12 @@ class CBitport:
                 (folder_name,folder_code) = next(((k,v) for k,v in folder_map.items() if (k.split("_")[-1]==str(tmdb_id))), (None, None))
 
             if not folder_code:
-                print(
+                self.logger.log(
                     f"Attention: Dossier '{folder_name}' non trouvé sur Bitport pour le film '{name}'."
                 )
                 continue
 
-            print(f"Transfert de '{name}' vers le dossier Bitport '{folder_name}'")
+            self.logger.log(f"Transfert de '{name}' vers le dossier Bitport '{folder_name}'")
             payload = {"folder_code": folder_code, "torrent": magnet_val}
 
             res = self.bitport_session.post(

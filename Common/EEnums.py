@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class EMediaType(Enum):
     File=1
     Gmail=2

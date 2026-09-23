@@ -1,19 +1,19 @@
+import py_compile
 import subprocess
 import sys
 from pathlib import Path
-import py_compile
 
 
 def check_syntax(directory: Path) -> bool:
     """Vérifie la syntaxe de tous les fichiers .py du projet."""
     print("🔍 Analyse de la syntaxe Python en cours...")
     has_error = False
-    
+
     for py_file in directory.rglob("*.py"):
         # Ignorer les environnements virtuels (.venv, venv, etc.)
         if any(part.startswith(".") or "venv" in part for part in py_file.parts):
             continue
-            
+
         try:
             py_compile.compile(str(py_file), doraise=True)
         except py_compile.PyCompileError as e:
@@ -44,8 +44,8 @@ def clean_unused_requirements(directory: Path) -> None:
             print("⚠️ Remarque : Pour une analyse automatique approfondie des requirements,")
             print("   tu peux installer et exécuter 'deptry' ou 'pip-extra-reqs' :")
             print("   -> pip install deptry && deptry .\n")
-            
-    except Exception as e:
+
+    except Exception as e:  # noqa: BLE001
         print(f"⚠️ Impossible d'exécuter l'analyseur automatique : {e}")
 
 
@@ -58,7 +58,7 @@ def find_unused_imports_with_ruff() -> None:
             [sys.executable, "-m", "ruff", "check", "--select", "F401", "--fix", "."],
             check=False
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 

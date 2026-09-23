@@ -1,27 +1,30 @@
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any
 
 import pandas as pd
-
-from Common.CUtils import (
-    data_frame_from_csv,
-    data_frame_to_csv,
+from Common.EEnums import EActionType, EMediaType
+from Common.Helpers.Audio import (
     get_audio_id3_tags,
     get_audio_tags,
+)
+from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
+from Common.Helpers.File import (
     get_file_common_fields,
     get_file_name_extension,
     get_file_name_without_extension,
+)
+from Common.Helpers.Media import (
     is_audio,
     is_video,
     move_media_file,
 )
-from Common.EEnums import EActionType, EMediaType
 from Media.CMedia import CMedia
+
 
 class CFile(CMedia):
     def __init__(
-        self, 
-        json_path: Union[str, Path],
+        self,
+        json_path: str | Path,
         action_type: EActionType
     ) -> None:
         super().__init__(json_path, EMediaType.File, action_type)
@@ -39,9 +42,9 @@ class CFile(CMedia):
         self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
 
     def _get_file_attributes_fields(
-        self, 
-        file_path: Union[str, Path]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        self,
+        file_path: str | Path
+    ) -> dict[str, list[dict[str, Any]]]:
         """Récupère les métadonnées de base du fichier et le déplace/copie si configuré."""
         path_obj = Path(file_path)
         self.logger.log(f"Get attributes fields of {path_obj}")
@@ -66,14 +69,14 @@ class CFile(CMedia):
                 target_dir = self.target_path / extension.replace(".", "")
                 file_name_without_ext = get_file_name_without_extension(path_obj)
 
-                def file_name_func(idx: int, suffix: str) -> str:
+                def file_name_func(idx: int, _: str) -> str:
                     index_str = str(idx) if idx != 0 else ""
                     return str(
                         target_dir
                         / f"{file_name_without_ext}{index_str}{extension}"
                     )
 
-                def is_same_media_func(other_file: Union[str, Path]) -> bool:
+                def is_same_media_func(other_file: str | Path) -> bool:
                     other_path = Path(other_file)
                     return (
                         other_path.is_file()
@@ -97,7 +100,7 @@ class CFile(CMedia):
 
             return {"file": [get_file_common_fields(target_file_path, True)]}
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.log(
                 f"Error with {path_obj} : failed to get fields ({e})"
             )
@@ -125,7 +128,7 @@ class CFile(CMedia):
             }
 
             def edit_task() -> bool:
-                return self._edit_audio_fields(file_path, fields_data)
+                return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
 
             log_msg = f"Edit {file_path} with fields {media_fields}"
             if self.logger.logElapsedTime(edit_task, log_msg):
@@ -137,9 +140,9 @@ class CFile(CMedia):
         data_frame_to_csv(df, self.source_path, self.data_separator, self.fieldsByCodec.get("file"))
 
     def _edit_audio_fields(
-        self, 
-        file_path: Union[str, Path],
-        fields: Dict[str, Any]
+        self,
+        file_path: str | Path,
+        fields: dict[str, Any]
     ) -> bool:
         """Modifie les étiquettes si le fichier s'avère être du contenu multimédia (Audio/Vidéo)."""
         path_obj = Path(file_path)
@@ -166,7 +169,7 @@ class CFile(CMedia):
 
             return True
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.log(
                 f"Error with {path_obj} : failed to edit tags ({e})"
             )

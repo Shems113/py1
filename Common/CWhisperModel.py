@@ -1,11 +1,11 @@
 import platform
 from pathlib import Path
-from typing import Optional, Tuple, Union, List, Dict, Any
-import numpy as np
-from faster_whisper import WhisperModel
+from typing import Any
 
-from Common.CLogger import CLogger
+import numpy as np
 from Common.CLazy import CLazy
+from Common.CLogger import CLogger
+from faster_whisper import WhisperModel
 
 
 class CWhisperModel:
@@ -23,9 +23,9 @@ class CWhisperModel:
         self.device: str = device
         self.compute_type: str = compute_type
         self.logger = logger
-        self.lazy_model: CLazy[Optional[WhisperModel]] = CLazy(self._load_model)
+        self.lazy_model: CLazy[WhisperModel | None] = CLazy(self._load_model)
 
-    def _load_model(self) -> Optional[WhisperModel]:
+    def _load_model(self) -> WhisperModel | None:
         """Ajuste l'environnement d'exécution et charge le modèle Whisper."""
         if self.device == "auto":
             if platform.system() == "Windows":
@@ -48,17 +48,17 @@ class CWhisperModel:
                 device=self.device,
                 compute_type=self.compute_type,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.logError(f"Failed to load Whisper model: {e}")
             return None
 
     def get_file_transcription_data(
         self,
-        audio_input: Union[Path, str, np.ndarray],
+        audio_input: Path | str | np.ndarray,
         beam_size: int = 10,
         patience: float = 2.0,
         best_of: int = 10,
-        temperature: Union[float, List[float], Tuple[float, ...]] = (
+        temperature: float | list[float] | tuple[float, ...] = (
             0.0,
             0.2,
             0.4,
@@ -71,9 +71,9 @@ class CWhisperModel:
         log_prob_threshold: float = -1.0,
         no_speech_threshold: float = 0.6,
         voice_activity_detection_filter: bool = True,
-        voice_activity_detection_parameters: Optional[dict] = None,
+        voice_activity_detection_parameters: dict | None = None,
         word_timestamps: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Génère les données de transcription à partir d'un fichier audio ou d'un flux numpy."""
 
         model_instance = self.lazy_model.value
@@ -132,6 +132,6 @@ class CWhisperModel:
 
             return results
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.logError(f"Error during transcription process: {e}")
             return []

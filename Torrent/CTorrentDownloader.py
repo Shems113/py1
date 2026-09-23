@@ -1,15 +1,19 @@
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Union
+
 import libtorrent as lt
-from Common.CUtils import get_video_extensions,clean_directory_name
+from Common.Helpers.File import clean_directory_name
+from Common.Helpers.Video import get_video_extensions
 
 
 class CTorrentDownloader:
     """Gestionnaire de téléchargement parallèle de liens magnet via libtorrent."""
 
-    def __init__(self, magnet_data: Dict[str, Union[str, int]], output_dir: Union[Path, str]) -> None:
+    def __init__(
+        self,
+        magnet_data: dict[str, str | int],
+        output_dir: Path | str) -> None:
         self.magnet_data = magnet_data
         self.base_save_path = Path(output_dir).resolve()
         self.base_save_path.mkdir(parents=True, exist_ok=True)
@@ -20,7 +24,7 @@ class CTorrentDownloader:
             "active_downloads": -1,
         })
 
-    def _add_magnets(self) -> List[lt.torrent_handle]:
+    def _add_magnets(self) -> list[lt.torrent_handle]:
         """Ajoute les magnets et configure les dossiers cibles par ID."""
         handles = []
         video_exts = get_video_extensions()
@@ -56,7 +60,7 @@ class CTorrentDownloader:
         """Boucle principale de suivi des téléchargements."""
         handles = self._add_magnets()
         print("\n--- Téléchargement en cours ---\n")
-        
+
         sys.stdout.write("\033[?25l")  # Masquer le curseur
         sys.stdout.flush()
 

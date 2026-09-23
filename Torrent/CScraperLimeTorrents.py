@@ -1,25 +1,22 @@
-import logging
 import re
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List
-from bs4 import BeautifulSoup
 
+from bs4 import BeautifulSoup
+from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
-from Common.Helper import (
+from Common.Helpers.HTML import parse_int
+from Common.Helpers.Other import (
     build_absolute_url,
     clean_query,
     get_mirrors_from_env,
-    parse_int,
-    parse_quality,
 )
+from Common.Helpers.Torrent import parse_quality_torrent
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
-
-logger = logging.getLogger(__name__)
 
 
 class CScraperLimeTorrents(CCommonTorrent):
-    def __init__(self):
+    def __init__(self,logger:Logger):
         mirrors = get_mirrors_from_env(
             "LIMETORRENTS_MIRRORS",
             [
@@ -28,17 +25,17 @@ class CScraperLimeTorrents(CCommonTorrent):
                 "https://www.limetorrents.co",
             ],
         )
-        super().__init__(mirrors)
+        super().__init__(mirrors,logger=logger)
 
     @property
     def source_name(self) -> str:
         return TorrentSource.LIMETORRENTS.value
 
-    def search(self, query: str, fetch_magnets: bool = True) -> List[TorrentResult]:
+    def search(self, query: str, fetch_magnets: bool = True) -> list[TorrentResult]:
         encoded = urllib.parse.quote(clean_query(query))
         urls = [f"{mirror}/search/all/{encoded}/" for mirror in self.mirrors]
 
-        def _parse(soup: BeautifulSoup, base_url: str) -> List[TorrentResult]:
+        def _parse(soup: BeautifulSoup, base_url: str) -> list[TorrentResult]:
             raw_results = []
             for row in soup.select("table.table2 tr"):
                 if row.find("th"):
@@ -86,7 +83,7 @@ class CScraperLimeTorrents(CCommonTorrent):
                     raw_results.append({
                         "source": self.source_name,
                         "title": title_text,
-                        "quality": parse_quality(title_text),
+                        "quality": parse_quality_torrent(title_text),
                         "seeds": s_parsed if s_parsed is not None else 0,
                         "leechs": l_parsed if l_parsed is not None else 0,
                         "size": size_raw,
@@ -94,8 +91,8 @@ class CScraperLimeTorrents(CCommonTorrent):
                         "magnet": magnet_url,
                         "detail_url": detail_link,
                     })
-                except Exception as e:
-                    logger.debug(f"Erreur parsing Limetorrents: {e}")
+                except Exception as e:  # noqa: BLE001
+                    self.logger.logError(f"Erreur parsing Limetorrents: {e}")
                     continue
 
             if not raw_results:
@@ -113,8 +110,8 @@ class CScraperLimeTorrents(CCommonTorrent):
                             item = future_to_item[future]
                             try:
                                 item["magnet"] = future.result()
-                            except Exception as e:
-                                logger.debug(f"Erreur fetch detail magnet: {e}")
+                            except Exception as e:  # noqa: BLE001
+                                self.logger.logError(f"Erreur fetch detail magnet: {e}")
 
             return [TorrentResult(**r) for r in raw_results]
 

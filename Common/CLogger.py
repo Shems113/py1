@@ -1,22 +1,24 @@
 import sys
 import time
-from typing import Callable, Any, List
+from collections.abc import Callable
+from typing import Any
+
 from loguru import logger
 
 
 class CLogger:
-    def __init__(self, log_paths: List[str]):
+    def __init__(self, log_paths: list[str]):
         self.log_paths = log_paths
-        
+
         # Format épuré : Heure | Niveau | Message
         log_format = "<green>{time:HH:mm:ss.SSSS}</green> | <level>{level: <3}</level> | {message}"
-        
+
         # 1. Suppression du handler par défaut
         logger.remove()
-        
+
         # 2. Handler console (sys.stderr) avec flush immédiat pour PowerShell
         logger.add(sys.stderr, format=log_format, colorize=True)
-        
+
         # 3. Handlers fichiers (réinitialisation et écriture asynchrone)
         for f in self.log_paths:
             open(f, "w", encoding="utf-8").close()
@@ -43,7 +45,7 @@ class CLogger:
         try:
             percent = (index / total) * 100 if total else 0
             self.log(f"Processed {index}/{total} ({percent:.1f}%) : {file_path}")
-        except Exception:
+        except Exception:  # noqa: BLE001
             self.log(f"Processed {index}/{total} : {file_path}")
 
     def logElapsedTime(self, func: Callable[[], Any], func_name: str) -> Any:
@@ -51,11 +53,11 @@ class CLogger:
         sep = "-------------------------------------------------------------------"
         self.log(sep)
         self.log(f"Init : {func_name}")
-        
+
         start_time = time.time()
         result = func()
         elapsed_time = time.time() - start_time
-        
+
         self.log(f"Time spent in {func_name} : {elapsed_time:.2f} seconds")
         self.log(sep)
         return result

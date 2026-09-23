@@ -1,18 +1,23 @@
+import sys
+from collections import defaultdict
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, List, Optional, Union
-import sys
+from typing import Any
+
 import pandas as pd
-import Common.CUtils as Utils
 from Common.CLogger import CLogger as Logger
+from Common.Helpers.Dataframe import data_frame_to_csv
+from Common.Helpers.File import remove_empty_folders
+from Common.Helpers.Json import json_from_file
+
 
 class CMedia:
     def __init__(
-        self, 
-        json_path: Union[str, Path],
-        media_type: Any, 
+        self,
+        json_path: str | Path,
+        media_type: Any,
         action_type: Any
     ) -> None:
         self.json_path = json_path
@@ -22,24 +27,24 @@ class CMedia:
         self.data_separator: str = ";"
 
         # Détermination dynamique de la racine du projet
-        self.project_root: Path = Path(__file__).resolve().parent
+        self.project_root: Path = Path(__file__).resolve().parents[1]
 
         # Chargement de la configuration
         self.item: dict[str, Any] = self._load_item(Path(self.json_path))
 
         # Résolution universelle et générique des chemins
         self.source_path: Path = self._resolve_path(self.item.get("RootSourcePath"))
-        
+
         extra_path = self.item.get("ExtraFileRootSourcePath")
-        self.other_source_path: Optional[Path] = self._resolve_path(extra_path) if extra_path else None
+        self.other_source_path: Path | None = self._resolve_path(extra_path) if extra_path else None
 
         target_path = self.item.get("RootTargetPath")
-        self.target_path: Optional[Path] = self._resolve_path(target_path) if target_path else None
+        self.target_path: Path | None = self._resolve_path(target_path) if target_path else None
 
         log_root = self._resolve_path(self.item.get("LogRootSourcePath", "logs"))
 
         # Construction du chemin de log
-        date_str = datetime.now().strftime("%d-%m-%Y")
+        date_str = datetime.now().astimezone().strftime("%d-%m-%Y")
         log_filename = f"{date_str}_{self.media_type.name}_{self.action_type.name}.txt"
         self.log_paths: list[str] = [str(log_root / log_filename)]
 
@@ -53,30 +58,30 @@ class CMedia:
 
         self.max_worker = 10
         self.logger = Logger(self.log_paths)
-      
+
     def _resolve_path(
-        self, 
-        raw_path: Union[str, Path, None]
+        self,
+        raw_path: str | Path | None
         ) -> Path:
         """Résout un chemin de manière générique : absolu s'il l'est, sinon relatif à la racine du projet."""
         if not raw_path:
             return self.project_root
-            
+
         path_obj = Path(str(raw_path))
         if path_obj.is_absolute():
             return path_obj
-        
+
         return self.project_root / path_obj
 
     def _load_item(
-        self, 
+        self,
         json_path: Path
         ) -> dict[str, Any]:
         """Extrait l'élément de configuration correspondant au MediaType et à l'Action."""
         media_name = self.media_type.name
         action_name = self.action_type.name
 
-        data = Utils.json_from_file(json_path)
+        data = json_from_file(json_path)
         items = data.get(media_name, [])
 
         target_item = next(
@@ -107,7 +112,7 @@ class CMedia:
         def fetch_files() -> list[str]:
             if not self.source_path.exists():
                 return []
-            
+
             matched_files = {
                 str(p) for pattern in self.file_patterns
                 for p in self.source_path.rglob(pattern) if p.is_file()
@@ -132,10 +137,10 @@ class CMedia:
 
     def remove_empty_folders(self) -> None:
         """Suppression récursive des dossiers vides dans le répertoire source."""
-        Utils.remove_empty_folders(self.source_path)
+        remove_empty_folders(self.source_path)
 
     def process_files_parallel(
-        self, 
+        self,
         extract_func: Callable[[str], dict[str, list[dict[str, Any]]]]
     ) -> dict[str, list[dict[str, Any]]]:
         """Exécute l'extraction d'attributs de fichiers en parallèle et accumule les résultats."""
@@ -164,13 +169,13 @@ class CMedia:
         return data
 
     def build_dataframes_by_codec(
-        self, 
-        data: Dict[str, List[Dict[str, Any]]], 
+        self,
+        data: dict[str, list[dict[str, Any]]],
         log_message: str=""
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """Extrait les attributs des fichiers et construit le DataFrame de données."""
 
-        def build_normalized() -> Dict[str, pd.DataFrame]:
+        def build_normalized() -> dict[str, pd.DataFrame]:
             return (
                 {codec_type: (value if isinstance(value, pd.DataFrame) else pd.json_normalize(value))
                 for codec_type, value in data.items()}
@@ -181,8 +186,8 @@ class CMedia:
         )
 
     def export_dataframes_to_csv_by_codec(
-        self, 
-        dicoOfDataframes: Dict[str, pd.DataFrame],
+        self,
+        dicoOfDataframes: dict[str, pd.DataFrame],
         isOtherSource: bool=False
     ) -> None:
         """Méthode factorisée pour exporter un dictionnaire de DataFrames en CSV."""
@@ -198,8 +203,8 @@ class CMedia:
             csv_file_path = target_dir / f"{codec_type}Result.csv"
 
             def export_csv() -> None:
-                Utils.data_frame_to_csv(
-                    df, csv_file_path, self.data_separator, self.fieldsByCodec.get(codec_type)
+                data_frame_to_csv(
+                    df, csv_file_path, self.data_separator, self.fieldsByCodec.get(codec_type)  # noqa: B023
                 )
 
             self.logger.logElapsedTime(export_csv, f"Display {codec_type}")

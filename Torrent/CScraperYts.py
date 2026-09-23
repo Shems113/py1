@@ -1,18 +1,14 @@
-import logging
 import urllib.parse
-from typing import List
-from Common.EEnums import ETorrentSource as TorrentSource
 
-from Common.Helper import (
-    parse_int,
-    get_mirrors_from_env
-)
+from Common.CLogger import CLogger as Logger
+from Common.EEnums import ETorrentSource as TorrentSource
+from Common.Helpers.HTML import parse_int
+from Common.Helpers.Other import get_mirrors_from_env
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 
-logger = logging.getLogger(__name__)
 
 class CScraperYts(CCommonTorrent):
-    def __init__(self):
+    def __init__(self,logger:Logger):
         mirrors = get_mirrors_from_env(
             "YTS_ENDPOINTS",
             [
@@ -27,13 +23,13 @@ class CScraperYts(CCommonTorrent):
             "udp://tracker.openbittorrent.com:80",
             "udp://tracker.coppersurfer.tk:6969",
         ]
-        super().__init__(mirrors, trackers)
+        super().__init__(mirrors, logger, trackers)
 
     @property
     def source_name(self) -> str:
         return TorrentSource.YTS.value
 
-    def search(self, query: str) -> List[TorrentResult]:
+    def search(self, query: str) -> list[TorrentResult]:
         encoded = urllib.parse.quote(query.strip())
         trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in self.trackers)
 
@@ -75,6 +71,6 @@ class CScraperYts(CCommonTorrent):
                         )
                 if results:
                     return results
-            except Exception as e:
-                logger.debug(f"Erreur API YTS {endpoint}: {e}")
+            except Exception as e:  # noqa: BLE001
+                self.logger.logError(f"Erreur API YTS {endpoint}: {e}")
         return []

@@ -1,16 +1,14 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
 import os
-import xml.etree.ElementTree as ET
-from typing import List, Optional
 import urllib.parse
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import requests
-
+from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
-from Common.Helper import parse_quality, parse_size
+from Common.Helpers.HTML import parse_size
+from Common.Helpers.Torrent import parse_quality_torrent
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
-
-logger = logging.getLogger(__name__)
 
 
 class CScraperTorznab(CCommonTorrent):
@@ -18,7 +16,7 @@ class CScraperTorznab(CCommonTorrent):
 
     DEFAULT_API_URL = "http://127.0.0.1:9696"
     DEFAULT_API_KEY = "f1d2663b9a944fdfaf211814b83ca131"
-    INDEXER_IDS = {
+    INDEXER_IDS = {  # noqa: RUF012
         1: "The Pirate Bay",
         2: "YTS",
         # 3: "LimeTorrents",
@@ -33,10 +31,11 @@ class CScraperTorznab(CCommonTorrent):
 
     def __init__(
         self,
-        api_url: Optional[str] = None,
-        api_key: Optional[str] = None,
+        logger:Logger,
+        api_url: str | None = None,
+        api_key: str | None = None,
         cat: str = "2000,2010,2020,2030,2040,2045,2050,2060",
-        max_workers: int = 10,
+        max_workers: int = 10
     ):
         raw_url = (
             api_url
@@ -56,7 +55,7 @@ class CScraperTorznab(CCommonTorrent):
 
         self.cat = cat
         self.max_workers = max_workers
-        super().__init__(mirrors=[self.api_url])
+        super().__init__(mirrors=[self.api_url],logger=logger)
 
     @property
     def source_name(self) -> str:
@@ -72,10 +71,10 @@ class CScraperTorznab(CCommonTorrent):
         }
         return f"{endpoint}?{urllib.parse.urlencode(params)}"
 
-    def _search_single_indexer(self, query: str, indexer_id: int) -> List[TorrentResult]:
+    def _search_single_indexer(self, query: str, indexer_id: int) -> list[TorrentResult]:
         """Interroge un seul indexeur Prowlarr et formate correctement la taille."""
         url = self._build_search_url_for_indexer(query, indexer_id)
-        results: List[TorrentResult] = []
+        results: list[TorrentResult] = []
 
         try:
             res = requests.get(url, timeout=8)
@@ -186,16 +185,15 @@ class CScraperTorznab(CCommonTorrent):
                 origin_indexer = f"Indexer-{indexer_id}"
                 for child in item:
                     tag_name = child.tag.split("}")[-1].lower() if "}" in child.tag else child.tag.lower()
-                    if tag_name in ("prowlarrindexer", "jackettindexer"):
-                        if child.text:
-                            origin_indexer = child.text
-                            break
+                    if tag_name in ("prowlarrindexer", "jackettindexer") and child.text:
+                        origin_indexer = child.text
+                        break
 
                 results.append(
                     TorrentResult(
                         source=f"Torznab:{origin_indexer}",
                         title=title,
-                        quality=parse_quality(title),
+                        quality=parse_quality_torrent(title),
                         seeds=seeds,
                         leechs=leechs,
                         size=size_str,
@@ -205,23 +203,23 @@ class CScraperTorznab(CCommonTorrent):
                     )
                 )
 
-        except Exception as e:
-            logger.debug(f"[{self.source_name}] Erreur indexeur {indexer_id} : {e}")
+        except Exception as e:  # noqa: BLE001
+            self.logger.logError(f"[{self.source_name}] Erreur indexeur {indexer_id} : {e}")
 
         return results
 
-    def search(self, query: str) -> List[TorrentResult]:
+    def search(self, query: str) -> list[TorrentResult]:
         if not self.api_key:
-            logger.error(f"[{self.source_name}] Clé API manquante.")
+            self.logger.logError(f"[{self.source_name}] Clé API manquante.")
             return []
 
-        all_results: List[TorrentResult] = []
+        all_results: list[TorrentResult] = []
 
         # Exécution en parallèle de la recherche sur les 10 indexeurs
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             future_to_id = {
                 executor.submit(self._search_single_indexer, query, idx_id): idx_id
-                for idx_id in self.INDEXER_IDS.keys()
+                for idx_id in self.INDEXER_IDS
             }
 
             for future in as_completed(future_to_id):
@@ -229,8 +227,8 @@ class CScraperTorznab(CCommonTorrent):
                     res = future.result()
                     if res:
                         all_results.extend(res)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     idx_id = future_to_id[future]
-                    logger.error(f"[{self.source_name}] Exception worker pour indexeur {idx_id} : {e}")
+                    self.logger.logError(f"[{self.source_name}] Exception worker pour indexeur {idx_id} : {e}")
 
         return all_results

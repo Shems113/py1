@@ -36,9 +36,9 @@ if ($isStreaming) {
 	
     & $streamingScript -InputFile $inputFile -OutputFile $outputFile -ExecutorExe $pyExe -ExecutorFlags "-OO" -ScriptPath $pyPath -AppArgs $pythonCommonArgs
 } else {
-    uv run --python $globalEnv $pyPath @pythonCommonArgs
+    # uv run --python $globalEnv $pyPath @pythonCommonArgs
 	# 2. Exécution de l'application vidéo seule (CVideoApp.py)
-	# uv run --python $globalEnv $pyVPath
+	uv run --python $globalEnv $pyVPath
 }
 
 # --- Section .NET ---

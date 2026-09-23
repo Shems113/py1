@@ -1,23 +1,21 @@
 import os
-from pathlib import Path
 import time
-from typing import List, Optional, Union
+from pathlib import Path
 
-from opensubtitlescom import OpenSubtitles
 import pandas as pd
-
-from Common.CUtils import (
-    data_frame_from_csv,
-    data_frame_to_csv,
-    get_file_name_without_extension,
-    get_folder_name,
-    move_media_file,
-)
-from Common.Helper import check_required_env_vars
+from Common.CLogger import CLogger as Logger
+from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
+from Common.Helpers.File import get_file_name_without_extension, get_folder_name
+from Common.Helpers.Media import move_media_file
+from Common.Helpers.Other import check_required_env_vars
+from opensubtitlescom import OpenSubtitles
 
 
 class COpenSubtitles:
-    def __init__(self):
+    def __init__(
+        self,
+        logger:Logger
+        ):
         check_required_env_vars(
             "OpenSubtitles",
             ["OPENSUBTITLES_USER", "OPENSUBTITLES_PASS", "OPENSUBTITLES_API_KEY"],
@@ -29,7 +27,7 @@ class COpenSubtitles:
         self.opensubtitles_user = os.getenv("OPENSUBTITLES_USER", opensubtitles_user)
         self.opensubtitles_pass = os.getenv("OPENSUBTITLES_PASS", opensubtitles_password)
         self.opensubtitles_api_key = os.getenv("OPENSUBTITLES_API_KEY", opensubtitles_api_key)
-        
+        self.logger = logger
         self.user_agent = f"{self.opensubtitles_user or 'MediaApp'} v1.0"
         self.opensubtitles_client = None
         self._is_logged_in = False
@@ -40,7 +38,7 @@ class COpenSubtitles:
             return True
 
         if not all([self.opensubtitles_user, self.opensubtitles_pass, self.opensubtitles_api_key]):
-            print("Erreur : Identifiants ou clé API OpenSubtitles manquants dans les variables d'environnement.")
+            self.logger.logError("Erreur : Identifiants ou clé API OpenSubtitles manquants dans les variables d'environnement.")
             return False
 
         try:
@@ -52,25 +50,25 @@ class COpenSubtitles:
             )
             self._is_logged_in = True
             return True
-        except Exception as e:
-            print(f"Erreur d'authentification OpenSubtitles : {e}")
+        except Exception as e:  # noqa: BLE001
+            self.logger.logError(f"Erreur d'authentification OpenSubtitles : {e}")
             self._is_logged_in = False
             return False
 
     def get_film_french_subtitles(
-        self, tmdb_id: int, name: str, year: Optional[int] = None
+        self, tmdb_id: int, name: str, year: int | None = None
     ) -> pd.DataFrame:
         """Recherche les sous-titres FR pour un film spécifique via son ID TMDB."""
         if not self._ensure_login():
             return pd.DataFrame()
 
-        print(f"Recherche de sous-titres FR pour : {name} ({year or 'N/A'})")
+        self.logger.log(f"Recherche de sous-titres FR pour : {name} ({year or 'N/A'})")
         try:
             response = self.opensubtitles_client.search(
                 tmdb_id=tmdb_id, languages="fr"
             )
             total_count = getattr(response, "total_count", 0)
-            print(f"Résultats trouvés : {total_count}")
+            self.logger.log(f"Résultats trouvés : {total_count}")
 
             data = getattr(response, "data", [])
             if not data:
@@ -83,18 +81,18 @@ class COpenSubtitles:
             ]
             return pd.json_normalize(data_list)
 
-        except Exception as e:
-            print(f"Erreur lors de la recherche de sous-titres pour {name}: {e}")
+        except Exception as e:  # noqa: BLE001
+            self.logger.logError(f"Erreur lors de la recherche de sous-titres pour {name}: {e}")
             return pd.DataFrame()
 
     def download_film_subtitle(
-        self, path: str, file_id: Union[int, str]
+        self, path: str, file_id: int | str
     ) -> pd.DataFrame:
         """Télécharge un sous-titre et le place à côté du fichier média."""
         if not self._ensure_login():
             return pd.DataFrame([{"subtitlePath": "AUTH_ERROR"}])
 
-        print(f"Téléchargement du sous-titre pour : {path} (file_id: {file_id})...")
+        self.logger.log(f"Téléchargement du sous-titre pour : {path} (file_id: {file_id})...")
         time.sleep(1)  # Respect du rate limit imposé par l'API OpenSubtitles
 
         try:
@@ -107,33 +105,33 @@ class COpenSubtitles:
             file_name = get_file_name_without_extension(path)
 
             # Formatage de nommage conforme (ex: film.fr.srt, film.fr2.srt, etc.)
-            name_func = lambda i, s: os.path.join(
-                dir_name,
-                f"{file_name}.fr{f'{i+1}' if i > 0 else ''}.srt"
-            )
-            check_func = lambda f: not os.path.isfile(f)
+            def name_func(i: int, _: str) -> str:
+                return os.path.join(dir_name,f"{file_name}.fr{f'{i+1}' if i > 0 else ''}.srt")
+
+            def check_func(f: str | Path) -> bool:
+                return not os.path.isfile(f)
 
             moved_files = move_media_file(temp_path, dir_name, name_func, check_func)
             sub_path = moved_files[0] if moved_files else "N/A"
 
-            print(f"Sous-titre enregistré : {sub_path}")
+            self.logger.log(f"Sous-titre enregistré : {sub_path}")
             return pd.DataFrame([{"subtitlePath": sub_path}])
 
-        except Exception as e:
-            print(f"Erreur au téléchargement du sous-titre {file_id} : {e}")
+        except Exception as e:  # noqa: BLE001
+            self.logger.logError(f"Erreur au téléchargement du sous-titre {file_id} : {e}")
             return pd.DataFrame([{"subtitlePath": "ERROR"}])
 
     # --- Routes Flask ---
 
     def route_get_films_subtitles(
-        self, inputFile: Union[str, Path], outputFile: Union[str, Path]
+        self, inputFile: str | Path, outputFile: str | Path
     ) -> bool:
         """Parcourt le CSV d'entrée, cherche les sous-titres pour chaque film et exporte les résultats."""
         df_input = data_frame_from_csv(inputFile, ";")
         if df_input.empty:
             return False
 
-        results: List[pd.DataFrame] = []
+        results: list[pd.DataFrame] = []
 
         for r in df_input.itertuples():
             tmdb_id = getattr(r, "tmdb_id", None)
@@ -155,18 +153,18 @@ class COpenSubtitles:
             data_frame_to_csv(final_df, outputFile, ";")
             return True
 
-        print("Aucun sous-titre trouvé pour l'ensemble des films du CSV.")
+        self.logger.log("Aucun sous-titre trouvé pour l'ensemble des films du CSV.")
         return False
 
     def route_download_films_subtitles(
-        self, inputFile: Union[str, Path], outputFile: Union[str, Path]
+        self, inputFile: str | Path, outputFile: str | Path
     ) -> bool:
         """Parcourt le CSV d'entrée et télécharge les sous-titres sélectionnés."""
         df_input = data_frame_from_csv(inputFile, ";")
         if df_input.empty:
             return False
 
-        results: List[pd.DataFrame] = []
+        results: list[pd.DataFrame] = []
 
         for r in df_input.itertuples():
             path_val = getattr(r, "path", None)

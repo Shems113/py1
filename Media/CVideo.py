@@ -1,34 +1,37 @@
-from pathlib import Path
-import sys
 import io
-from typing import Any, Dict, List, Union
+import sys
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pandas as pd
-
-from Common.CUtils import (
-    data_frame_from_csv,
-    data_frame_to_csv,
-    ensure_ffmpeg_available,
+from Common.CWhisperModel import CWhisperModel
+from Common.EEnums import EActionType, EMediaType
+from Common.Helpers.Audio import (
     extract_mono_16khz_pcm_stream,
-    format_timestamp,
     get_audio_id3_tags,
     get_audio_tags,
-    get_file_common_fields,
-    get_video_streams_and_chapters,
-    get_video_corrupted_frames_info,
+)
+from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
+from Common.Helpers.File import get_file_common_fields
+from Common.Helpers.Media import (
+    ensure_ffmpeg_available,
     is_audio,
     is_text_file,
     is_video,
 )
-from Common.CWhisperModel import CWhisperModel
-from Common.EEnums import EActionType, EMediaType
+from Common.Helpers.Other import format_timestamp
+from Common.Helpers.Video import (
+    get_video_corrupted_frames_info,
+    get_video_streams_and_chapters,
+)
 from Media.CMedia import CMedia
 
 
 class CVideo(CMedia):
     def __init__(
         self,
-        json_path: Union[str, Path],
+        json_path: str | Path,
         action_type: EActionType,
         media_type: EMediaType = EMediaType.Video,
     ) -> None:
@@ -48,7 +51,7 @@ class CVideo(CMedia):
                     lambda: get_video_corrupted_frames_info(stream_buffer),
                     "Video frames checking from input stream..."
                 )
-            
+
             df = pd.DataFrame([frame_errors] if frame_errors else [])
             data_frame_to_csv(
                 df=df,
@@ -62,13 +65,13 @@ class CVideo(CMedia):
             self.export_dataframes_to_csv_by_codec(dfs)
 
     def _get_video_attributes_fields(
-        self, 
-        file_path: Union[str, Path]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        self,
+        file_path: str | Path
+    ) -> dict[str, list[dict[str, Any]]]:
         """Extrait les flux, chapitres et métadonnées d'un fichier vidéo/texte."""
         path_obj = Path(file_path)
         self.logger.log(f"Get video attributes fields of {path_obj}")
-        result: Dict[str, List[Dict[str, Any]]] = {}
+        result: dict[str, list[dict[str, Any]]] = {}
 
         if not (is_video(path_obj) or is_text_file(path_obj)):
             return result
@@ -76,7 +79,7 @@ class CVideo(CMedia):
         try:
             common_fields = get_file_common_fields(path_obj)
             streams, chapters = get_video_streams_and_chapters(path_obj)
-            
+
             for stream in streams:
                 codec_type = stream.get("codec_type")
                 if codec_type:
@@ -99,7 +102,7 @@ class CVideo(CMedia):
                 audio_tags = dict(get_audio_tags(path_obj))
                 result["videoOther"] = [common_fields | audio_tags]
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.logError(
                 f"Error with {path_obj} : failed to get fields ({e})"
             )
@@ -128,7 +131,7 @@ class CVideo(CMedia):
             }
 
             def edit_task() -> bool:
-                return self._edit_audio_fields(file_path, fields_data)
+                return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
 
             log_msg = f"Edit {file_path} with fields {media_fields}"
             if self.logger.logElapsedTime(edit_task, log_msg):
@@ -145,7 +148,7 @@ class CVideo(CMedia):
         )
 
     def _edit_audio_fields(
-        self, file_path: Union[str, Path], fields: Dict[str, Any]
+        self, file_path: str | Path, fields: dict[str, Any]
     ) -> bool:
         """Met à jour les étiquettes (tags) d'un fichier média audio ou vidéo."""
         path_obj = Path(file_path)
@@ -172,7 +175,7 @@ class CVideo(CMedia):
 
             return True
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.logError(
                 f"Error with {path_obj} : failed to edit tags ({e})"
             )
@@ -190,16 +193,16 @@ class CVideo(CMedia):
                 fields=self.fieldsByCodec.get("audioTranscription"),
             )
         else:
-            data = self.process_files_parallel(self.transcribe_video_audio_file)
+            data_by_codec = self.process_files_parallel(self.transcribe_video_audio_file)
             dfs = self.build_dataframes_by_codec(
-                data, log_message="Audio transcription map generated for "
+                data_by_codec, log_message="Audio transcription map generated for "
             )
             self.export_dataframes_to_csv_by_codec(dfs)
 
     def transcribe_video_audio_file(
         self,
-        file_path: Union[str, Path]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        file_path: str | Path
+    ) -> dict[str, list[dict[str, Any]]]:
         """Convertit un fichier média en flux PCM via CUtils et délègue la transcription à _transcribe_video_audio_stream."""
         path_obj = Path(file_path).resolve()
         if not (is_video(path_obj) or is_audio(path_obj)):
@@ -224,19 +227,19 @@ class CVideo(CMedia):
             self.logger.log(f"Transcription successful: {path_obj.name}")
             return {"audioTranscription": audio_transcription}
 
-        except Exception as ex:
+        except Exception as ex:  # noqa: BLE001
             self.logger.logError(f"Error transcribing {path_obj.name}: {ex}")
             return {}
 
     def _transcribe_video_audio_stream(
         self,
-        stream_input: bytes = None,
+        stream_input: bytes | None = None,
         source_name: str = "stdin",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Lit un flux audio PCM 16-bit 16kHz Mono (depuis stdin ou un paramètre bytes) et exécute Whisper."""
         if stream_input is None:
             stream_input = self._chunk_input_stream()
-            
+
         if not self._validate_raw_pcm_stream(stream_input):
             return []
 
@@ -337,8 +340,8 @@ class CVideo(CMedia):
     def _get_data(
         self,
         is_srt: bool,
-        i: int, 
-        seg: Dict[str, Any]
+        i: int,
+        seg: dict[str, Any]
     ) -> str:
         self.logger.log(f"Get data of the segment {i} : {seg}")
 

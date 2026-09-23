@@ -1,29 +1,31 @@
+import typing
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Union
 
 import pandas as pd
-
-from Common.CUtils import (
+from Common.EEnums import EActionType, EMediaType
+from Common.Helpers.Audio import (
     add_audio_id3_images,
+    get_audio_id3_tags,
+)
+from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
+from Common.Helpers.File import (
     clean_file_name,
     clean_last_directory_name,
-    data_frame_from_csv,
-    data_frame_to_csv,
-    get_audio_id3_tags,
     get_file_common_fields,
     get_file_name_extension,
+)
+from Common.Helpers.Media import (
     is_audio,
     move_media_file,
 )
-from Common.EEnums import EActionType, EMediaType
 from Media.CMedia import CMedia
 
 
 class CMusic(CMedia):
     def __init__(
-        self, 
-        json_path: Union[str, Path],
+        self,
+        json_path: str | Path,
         action_type: EActionType
     ) -> None:
         super().__init__(json_path, EMediaType.Music, action_type)
@@ -42,18 +44,18 @@ class CMusic(CMedia):
         self.remove_empty_folders()
 
     def _build_dataframes(
-        self, 
-        data: Dict[str, List[Dict[str, Any]]]
-        ) -> Dict[str, pd.DataFrame]:
-            # Normalisation Pandas & construction des DataFrames (raw et agrégé)
-            raw_results: Dict[str, pd.DataFrame] = self.build_dataframes_by_codec(data)
-            agg_results: Dict[str, pd.DataFrame] = self.build_dataframes_by_codec(self._build_aggregated(raw_results), log_message="Aggregated ")
-            return raw_results | {f"{codec_type}Agg": df for codec_type, df in agg_results.items()}
-        
+        self,
+        data: dict[str, list[dict[str, typing.Any]]]
+        ) -> dict[str, pd.DataFrame]:
+        # Normalisation Pandas & construction des DataFrames (raw et agrégé)
+        raw_results: dict[str, pd.DataFrame] = self.build_dataframes_by_codec(data)
+        agg_results: dict[str, pd.DataFrame] = self.build_dataframes_by_codec(self._build_aggregated(raw_results), log_message="Aggregated ")
+        return raw_results | {f"{codec_type}Agg": df for codec_type, df in agg_results.items()}
+
     def _build_aggregated(
         self,
-        data: Dict[str, pd.DataFrame]
-        ) -> Dict[str, pd.DataFrame]:
+        data: dict[str, pd.DataFrame]
+        ) -> dict[str, pd.DataFrame]:
         aggregated = {}
         for codec, df in data.items():
             if df.empty:
@@ -81,11 +83,11 @@ class CMusic(CMedia):
             )
         return aggregated
 
-    
+
     def _get_music_attributes_fields(
-        self, 
-        file_path: Union[str, Path]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        self,
+        file_path: str | Path
+    ) -> dict[str, list[dict[str, typing.Any]]]:
         """Extrait les tags et déplace/copie le fichier si configuré."""
         path_obj = Path(file_path)
         self.logger.log(f"Get music attributes fields of {path_obj}")
@@ -129,7 +131,7 @@ class CMusic(CMedia):
                     title = clean_file_name(audio.get("title", [""])[0])
                     return str(target_dir / f"{prefix}{title}{extension}")
 
-                def is_same_media_func(other_file: Union[str, Path]) -> bool:
+                def is_same_media_func(other_file: str | Path) -> bool:
                     other_path = Path(other_file)
                     if not other_path.is_file():
                         return False
@@ -165,7 +167,7 @@ class CMusic(CMedia):
                 "musicOther": [common_fields | other_info],
             }
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.logError(
                 f"Error with {file_path} : failed to get fields ({e})"
             )
@@ -198,7 +200,7 @@ class CMusic(CMedia):
             }
 
             def edit_task() -> bool:
-                return self._edit_audio_fields(file_path, fields_data)
+                return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
 
             log_msg = f"Edit {file_path} with fields {media_fields}"
             if self.logger.logElapsedTime(edit_task, log_msg):
@@ -210,9 +212,9 @@ class CMusic(CMedia):
         data_frame_to_csv(df, self.source_path, self.data_separator)
 
     def _edit_audio_fields(
-        self, 
-        file_path: Union[str, Path], 
-        fields: Dict[str, Any]
+        self,
+        file_path: str | Path,
+        fields: dict[str, typing.Any]
     ) -> bool:
         """Modifie les champs ID3 d'un fichier audio spécifique."""
         path_obj = Path(file_path)
@@ -235,7 +237,7 @@ class CMusic(CMedia):
                 self.logger.log(f"Update {path_obj} tags with {updates}")
             return True
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.logger.log(
                 f"Error with {path_obj} : failed to edit tags ({e})"
             )
@@ -253,8 +255,8 @@ class CMusic(CMedia):
             return
 
         # Restructuration des images par fichier
-        image_mapping: Dict[
-            str, Dict[str, Dict[str, str]]
+        image_mapping: dict[
+            str, dict[str, dict[str, str]]
         ] = defaultdict(lambda: defaultdict(dict))
         for row in df.itertuples(index=False):
             image_mapping[row.path][row.imagePath][row.imageType] = (
@@ -269,7 +271,7 @@ class CMusic(CMedia):
                 continue
 
             def add_images_task() -> None:
-                add_audio_id3_images(path_obj, images_config)
+                add_audio_id3_images(path_obj, images_config)  # noqa: B023
 
             try:
                 self.logger.logElapsedTime(
@@ -277,7 +279,7 @@ class CMusic(CMedia):
                     f"Add images to {path_obj} with {images_config}",
                 )
                 paths_to_remove.append(file_path)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 self.logger.log(
                     f"Error with {path_obj} : failed to add image {images_config} ({e})"
                 )
