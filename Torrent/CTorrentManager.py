@@ -3,6 +3,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pandas as pd
+
 from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
 from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv

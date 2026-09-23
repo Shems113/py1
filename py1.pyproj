@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{f361b985-6cb5-4376-83ea-e7a2e7b53dee}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>CVideoApp.py</StartupFile>
+    <StartupFile>Compile.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -72,6 +72,7 @@
     <Content Include="PowerShell\linux_deploy_python.ps1" />
     <Content Include="PowerShell\linux_streaming.ps1" />
     <Content Include="requirements.txt" />
+    <Content Include="ruff.toml" />
     <Content Include="Templates\index.html" />
     <Content Include="Torrent\CScraperYts.py" />
   </ItemGroup>

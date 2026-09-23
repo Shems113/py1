@@ -3,6 +3,7 @@ import webbrowser
 from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template, request
+
 from MediaService.CBitport import CBitport
 from MediaService.COpenSubtitles import COpenSubtitles
 from MediaService.CTmdb import CTmdb

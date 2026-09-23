@@ -5,8 +5,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from bs4 import BeautifulSoup
-from Common.CLogger import CLogger as Logger
 from curl_cffi import requests
+
+from Common.CLogger import CLogger as Logger
 
 
 @dataclass

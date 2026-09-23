@@ -6,6 +6,12 @@ from email.utils import parseaddr
 from pathlib import Path
 
 import pandas as pd
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import Resource, build
+from googleapiclient.errors import HttpError
+
 from Common.EEnums import EActionType, EMediaType
 from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
 from Common.Helpers.File import clean_file_name, get_file_name_extension
@@ -13,11 +19,6 @@ from Common.Helpers.Json import (
     json_from_file,
     json_to_file,
 )
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import Resource, build
-from googleapiclient.errors import HttpError
 from Media.CMedia import CMedia
 
 

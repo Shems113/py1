@@ -3,9 +3,10 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from faster_whisper import WhisperModel
+
 from Common.CLazy import CLazy
 from Common.CLogger import CLogger
-from faster_whisper import WhisperModel
 
 
 class CWhisperModel:

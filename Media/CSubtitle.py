@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import pysrt
+
 from Common.CWhisperModel import CWhisperModel
 from Common.EEnums import EActionType, EMediaType
 from Common.Helpers.Dataframe import data_frame_from_csv

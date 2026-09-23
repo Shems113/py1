@@ -1,0 +1,13 @@
+# Configuration Ruff du projet : fixe les règles pour que le résultat
+# ne dépende ni de la version de Ruff ni du dossier ouvert dans l'éditeur.
+[lint]
+select = [
+    "E4", "E7", "E9",  # erreurs pycodestyle (imports mal placés, syntaxe...)
+    "F",               # pyflakes : noms non définis, imports inutilisés...
+    "I",               # tri des imports
+    "B",               # bugbear : pièges classiques (closures dans une boucle...)
+]
+
+[lint.isort]
+# Tes propres modules, séparés des paquets installés par une ligne vide
+known-first-party = ["Common", "Media", "MediaService", "Torrent"]

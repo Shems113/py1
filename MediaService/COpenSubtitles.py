@@ -3,12 +3,13 @@ import time
 from pathlib import Path
 
 import pandas as pd
+from opensubtitlescom import OpenSubtitles
+
 from Common.CLogger import CLogger as Logger
 from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
 from Common.Helpers.File import get_file_name_without_extension, get_folder_name
 from Common.Helpers.Media import move_media_file
 from Common.Helpers.Other import check_required_env_vars
-from opensubtitlescom import OpenSubtitles
 
 
 class COpenSubtitles:
