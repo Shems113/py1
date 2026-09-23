@@ -8,8 +8,9 @@ import requests
 
 from Common.CLogger import CLogger as Logger
 from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
-from Common.Helpers.Other import check_required_env_vars, handle_response
+from Common.Helpers.Other import check_required_env_vars
 from Common.Helpers.Torrent import select_best_quality_torrent
+from Common.Helpers.Web import handle_response
 
 
 class CBitport:

@@ -1,12 +1,6 @@
-import numbers
 import os
-import re
-from datetime import datetime, timedelta
-from typing import Any
 
-import pandas as pd
 import regex as reg
-import requests
 
 
 def check_required_env_vars(
@@ -24,36 +18,6 @@ def check_required_env_vars(
             f"⚠️  [{service_name}] Variable(s) d'environnement manquante(s) : {', '.join(missing)}."
         )
     return missing
-
-def handle_response(
-    response: requests.Response,
-    include_json: bool = False
-    ) -> dict:
-    """Affiche le statut HTTP de la réponse et retourne son contenu JSON.
-
-    Si la requête a échoué ou ne contient pas de JSON valide, retourne un dictionnaire vide.
-    """
-    status = "OK" if response.ok else "KO"
-    print(f"{status} : {response.status_code}")
-    data = response.json() if response.ok else {}
-    if include_json and response.ok:
-        print(data)
-    return data
-
-def build_absolute_url(
-    base_url: str,
-    path: str
-    ) -> str:
-    """Convertit un lien relatif (ex: '/torrent/123') en URL absolue avec le domaine racine de base_url."""
-    if not path or path.startswith("http"):
-        return path or "N/A"
-    base_domain = "/".join(base_url.split("/")[:3])
-    return f"{base_domain}{path}" if path.startswith("/") else f"{base_domain}/{path}"
-
-def clean_query(query: str) -> str:
-    """Nettoie une chaîne de recherche en supprimant la ponctuation gênante (deux-points, tirets, etc.)."""
-    q = re.sub(r'[:\'\-_]', ' ', query)
-    return ' '.join(q.split())
 
 def get_mirrors_from_env(
     env_var: str,
@@ -88,38 +52,4 @@ def format_timestamp(seconds: float) -> str:
 def time_to_seconds(t):
     """Convertit un objet pysrt time en secondes."""
     return t.hours * 3600 + t.minutes * 60 + t.seconds + t.milliseconds / 1000
-
-def compute_carrefour_bill_values(
-    df: pd.DataFrame,
-) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Calcule le résumé de facturation Carrefour."""
-    df_calc = df.assign(priceWithTva=df["price"] * df["tva"] / 100)
-    bill_date = datetime.now().astimezone() + timedelta(days=-1, hours=-5)
-    total = df_calc["price"].sum()
-    tva_20 = df_calc[df_calc["tva"] == 20]["price"].sum()
-    tva_5_5 = df_calc[df_calc["tva"] == 5.5]["price"].sum()
-
-    values = {
-        "billdDateTime1": bill_date.strftime("%d/%m/%Y à %Hh%M"),
-        "billdDateTime2": (bill_date + timedelta(minutes=2)).strftime(
-            "%d.%m.%Y %H:%M"
-        ),
-        "total": total,
-        "montantCBPayé": total,
-        "totalTVA20": tva_20,
-        "totalTVA5_5": tva_5_5,
-        "totalTVA": tva_20 + tva_5_5,
-        "tva": df_calc["priceWithTva"].sum(),
-        "tva20": df_calc[df_calc["tva"] == 20]["priceWithTva"].sum(),
-        "tva5_5": df_calc[df_calc["tva"] == 5.5]["priceWithTva"].sum(),
-    }
-
-    df_res = df_calc.drop(columns=["priceWithTva"]).assign(
-        tva=df_calc["tva"].astype(str) + "%"
-    )
-    formatted = {
-        k: f"{round(v, 2)}€" if isinstance(v, numbers.Number) else v
-        for k, v in values.items()
-    }
-    return df_res, formatted
 

@@ -4,8 +4,9 @@ from datetime import datetime
 from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
 from Common.Helpers.HTML import parse_int
-from Common.Helpers.Other import clean_query, get_mirrors_from_env
+from Common.Helpers.Other import get_mirrors_from_env
 from Common.Helpers.Torrent import parse_quality_torrent
+from Common.Helpers.Web import clean_query
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 
 

@@ -1,5 +1,7 @@
+import numbers
 import sys
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -9,7 +11,6 @@ import pandas as pd
 from Common.EEnums import EActionType, EMediaType
 from Common.Helpers.Dataframe import data_frame_from_csv
 from Common.Helpers.File import get_target_filename_for_word
-from Common.Helpers.Other import compute_carrefour_bill_values
 from Media.CMedia import CMedia
 
 IS_WINDOWS = sys.platform == "win32"
@@ -46,7 +47,7 @@ class CWord(CMedia):
     def get_data(self) -> tuple[pd.DataFrame, dict[str, Any]]:
         if self.action_type == EActionType.Write and self.other_source_path:
             df = data_frame_from_csv(str(self.other_source_path), self.data_separator)
-            return compute_carrefour_bill_values(df[df["isSelected"] == 1].drop(columns=["isSelected"]))
+            return _compute_carrefour_bill_values(df[df["isSelected"] == 1].drop(columns=["isSelected"]))
         return pd.DataFrame(), {}
 
     def close(self) -> None:
@@ -140,3 +141,38 @@ class CWord(CMedia):
 
         self.shuffle_df = True
         return "WriteBookmarks"
+
+
+def _compute_carrefour_bill_values(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Calcule le résumé de facturation Carrefour."""
+    df_calc = df.assign(priceWithTva=df["price"] * df["tva"] / 100)
+    bill_date = datetime.now().astimezone() + timedelta(days=-1, hours=-5)
+    total = df_calc["price"].sum()
+    tva_20 = df_calc[df_calc["tva"] == 20]["price"].sum()
+    tva_5_5 = df_calc[df_calc["tva"] == 5.5]["price"].sum()
+
+    values = {
+        "billdDateTime1": bill_date.strftime("%d/%m/%Y à %Hh%M"),
+        "billdDateTime2": (bill_date + timedelta(minutes=2)).strftime(
+            "%d.%m.%Y %H:%M"
+        ),
+        "total": total,
+        "montantCBPayé": total,
+        "totalTVA20": tva_20,
+        "totalTVA5_5": tva_5_5,
+        "totalTVA": tva_20 + tva_5_5,
+        "tva": df_calc["priceWithTva"].sum(),
+        "tva20": df_calc[df_calc["tva"] == 20]["priceWithTva"].sum(),
+        "tva5_5": df_calc[df_calc["tva"] == 5.5]["priceWithTva"].sum(),
+    }
+
+    df_res = df_calc.drop(columns=["priceWithTva"]).assign(
+        tva=df_calc["tva"].astype(str) + "%"
+    )
+    formatted = {
+        k: f"{round(v, 2)}€" if isinstance(v, numbers.Number) else v
+        for k, v in values.items()
+    }
+    return df_res, formatted

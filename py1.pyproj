@@ -31,6 +31,7 @@
     <Compile Include="Common\Helpers\Other.py" />
     <Compile Include="Common\Helpers\Torrent.py" />
     <Compile Include="Common\Helpers\Video.py" />
+    <Compile Include="Common\Helpers\Web.py" />
     <Compile Include="Compile.py" />
     <Compile Include="MediaService\CBitport.py" />
     <Compile Include="MediaService\COpenSubtitles.py" />
