@@ -29,11 +29,13 @@
     <Compile Include="Common\Helpers\Json.py" />
     <Compile Include="Common\Helpers\Media.py" />
     <Compile Include="Common\Helpers\Other.py" />
+    <Compile Include="Common\Helpers\System.py" />
     <Compile Include="Common\Helpers\Torrent.py" />
     <Compile Include="Common\Helpers\Video.py" />
     <Compile Include="Common\Helpers\Web.py" />
     <Compile Include="Compile.py" />
     <Compile Include="MediaService\CBitport.py" />
+    <Compile Include="MediaService\CFreebox.py" />
     <Compile Include="MediaService\COpenSubtitles.py" />
     <Compile Include="MediaService\CTmdb.py" />
     <Compile Include="Media\CFile.py" />
@@ -52,6 +54,7 @@
     <Compile Include="Torrent\CCommonTorrent.py" />
     <Compile Include="Torrent\CScraperTorznab.py" />
     <Compile Include="Torrent\CTorrentDownloader.py" />
+    <Compile Include="Torrent\CFreeboxDownloader.py" />
     <Compile Include="Torrent\CTorrentManager.py" />
   </ItemGroup>
   <ItemGroup>
@@ -65,6 +68,8 @@
     <Folder Include="Templates\" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Files\freebox_ca.pem" />
+    <Content Include="Files\freebox_token.json" />
     <Content Include="PowerShell\cmd.ps1" />
     <Content Include="Files\GmailApiSettings.json" />
     <Content Include="Files\LinuxSettings.json" />

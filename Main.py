@@ -1,8 +1,8 @@
 import argparse
-import platform
 from pathlib import Path
 
 from Common.EEnums import EActionType, EMediaType
+from Common.Helpers.System import IS_LINUX, IS_WINDOWS
 from Media.CFile import CFile as File
 from Media.CGmail import CGmail as Gmail
 from Media.CMusic import CMusic as Music
@@ -53,7 +53,7 @@ def main() -> None:
         help="Path to the JSON settings file",
         default=str(
             Path("Files")
-            / f"{('Windows' if platform.system() == 'Windows' else 'Linux')}Settings.json"
+            / f"{('Windows' if IS_WINDOWS else ('Linux' if IS_LINUX else ''))}Settings.json"
         ),
     )
     parser.add_argument(

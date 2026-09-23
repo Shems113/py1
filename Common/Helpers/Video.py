@@ -7,7 +7,21 @@ from typing import Any, BinaryIO
 import av
 import ffmpeg
 import numpy as np  # Importation propre et officielle du package ffmpeg-python
+from av.codec.hwaccel import HWAccel
 
+from Common.Helpers.System import IS_MY_GPU_MACHINE
+
+
+def _open_container(source: str | BinaryIO) -> Any:
+    """Ouvre le conteneur, en décodage GPU si USE_GPU, sinon (ou en cas d'échec) en décodage CPU."""
+    if IS_MY_GPU_MACHINE:
+        try:
+            print("USE_GPU")
+            return av.open(source, hwaccel=HWAccel(device_type="d3d11va", allow_software_fallback=True))
+        except (OSError, av.FFmpegError):
+            if not isinstance(source, str):
+                source.seek(0)  # flux déjà entamé : on le rembobine avant de réessayer en CPU
+    return av.open(source)
 
 def get_video_extensions() -> set[str]:
     """Retourne l'ensemble de toutes les extensions de fichiers vidéo référencées par mimetypes."""
@@ -52,49 +66,48 @@ def get_video_corrupted_frames_info(
     input_source: str | Path | BinaryIO
 ) -> dict[str, Any]:
     """Décode le flux avec PyAV, compte les frames invalides et calcule le ratio de corruption.
-
     Accepte un chemin de fichier (str/Path) ou un flux streaming reçu par SSH (ex: sys.stdin.buffer).
+    Sur Windows (TX16PRO), le décodage passe par le GPU (D3D11VA) pour les codecs qu'il supporte.
     """
     total_frames = 0
     corrupted_frames = 0
     first_error = None
-
+ 
     try:
-        # PyAV accepte directement un objet fichier binaire (Stream / Pipe) ou un chemin string
-        if isinstance(input_source, (str, Path)):
-            container = av.open(str(input_source))
-        else:
-            container = av.open(input_source)
-
-        stream = container.streams.video[0]
-
-        # Parcours paquet par paquet pour continuer le scan même après une erreur
-        for packet in container.demux(stream):
-            try:
-                for _ in packet.decode():
-                    total_frames += 1
-            except av.FFmpegError as e:
-                corrupted_frames += 1
-                if not first_error:
-                    first_error = str(e)
-
+        source = str(input_source) if isinstance(input_source, (str, Path)) else input_source
+        with _open_container(source) as container:
+            stream = container.streams.video[0]
+            hw_decoding = stream.codec_context.is_hwaccel
+ 
+            # Parcours paquet par paquet pour continuer le scan même après une erreur
+            for packet in container.demux(stream):
+                try:
+                    for _ in packet.decode():
+                        total_frames += 1
+                except av.FFmpegError as e:
+                    corrupted_frames += 1
+                    if not first_error:
+                        first_error = str(e)
+ 
     except Exception as e:  # noqa: BLE001
         return {
             "total_frames": 0,
             "error": f"Erreur ouverture/I-O: {e!s}",
             "corrupted_count": None,
             "corruption_ratio": 0.0,
+            "hw_decoding": None,
         }
-
+ 
     # Calcul du ratio
     processed_total = total_frames + corrupted_frames
     ratio = (corrupted_frames / processed_total) if processed_total > 0 else 0.0
-
+ 
     return {
         "total_frames": processed_total,
         "error": first_error,
         "corrupted_count": corrupted_frames,
         "corruption_ratio": round(ratio, 4),  # ex: 0.0345
+        "hw_decoding": hw_decoding,
     }
 
 def _stream_duration_sec(stream: Any, container: Any) -> float | None:

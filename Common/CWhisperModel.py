@@ -1,4 +1,3 @@
-import platform
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +6,7 @@ from faster_whisper import WhisperModel
 
 from Common.CLazy import CLazy
 from Common.CLogger import CLogger
+from Common.Helpers.System import IS_LINUX
 
 
 class CWhisperModel:
@@ -29,14 +29,14 @@ class CWhisperModel:
     def _load_model(self) -> WhisperModel | None:
         """Ajuste l'environnement d'exécution et charge le modèle Whisper."""
         if self.device == "auto":
-            if platform.system() == "Windows":
-                self.device = "cpu"
-                if self.compute_type == "default":
-                    self.compute_type = "int8"
-            else:
+            if IS_LINUX:
                 self.device = "cuda"
                 if self.compute_type == "default":
                     self.compute_type = "float16"
+            else:
+                self.device = "cpu"
+                if self.compute_type == "default":
+                    self.compute_type = "int8"
 
         self.logger.log(
             f"Loading Whisper model ({self.model_size_or_path}) on device '{self.device}' "

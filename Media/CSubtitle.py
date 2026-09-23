@@ -1,4 +1,3 @@
-import platform
 import typing
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from Common.CWhisperModel import CWhisperModel
 from Common.EEnums import EActionType, EMediaType
 from Common.Helpers.Dataframe import data_frame_from_csv
 from Common.Helpers.Other import time_to_seconds
+from Common.Helpers.System import IS_WINDOWS
 from Media.CMedia import CMedia
 from Media.CVideo import CVideo
 
@@ -23,7 +23,7 @@ class CSubtitle(CMedia):
         self.video = CVideo(self.json_path, self.action_type, EMediaType.Subtitle)
         self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3")
         is_transcribe_action = action_type in [EActionType.Transcribe, EActionType.TranscribeAndCheck]
-        self.max_worker = (4 if (platform.system() == "Windows") and is_transcribe_action else 1)
+        self.max_worker = (4 if IS_WINDOWS and is_transcribe_action else 1)
         self.mapping_video_srt_files: dict[Path, list[Path]] = {}
         self.tolerance_seconds = 0.2
 

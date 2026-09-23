@@ -1,5 +1,4 @@
 import numbers
-import sys
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import wraps
@@ -11,9 +10,9 @@ import pandas as pd
 from Common.EEnums import EActionType, EMediaType
 from Common.Helpers.Dataframe import data_frame_from_csv
 from Common.Helpers.File import get_target_filename_for_word
+from Common.Helpers.System import IS_WINDOWS
 from Media.CMedia import CMedia
 
-IS_WINDOWS = sys.platform == "win32"
 win32 = __import__("win32com.client").client if IS_WINDOWS else None
 
 def win32_required(func: Callable) -> Callable:

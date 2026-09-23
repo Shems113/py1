@@ -2,7 +2,8 @@
   "File": [
     {
       "Action": "Read",
-      "RootSourcePath": "D:\\Result\\Subtitle\\srt\\Transcription from Linux\\",
+      "RootSourcePath": "D:\\Result\\Video\\",
+	  "RootSourcePaths": "D:\\Result\\Subtitle\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "ExtraFileRootSourcePath": "D:\\Result\\File\\",
       "RootTargetPath": "C:\\Users\\SEDOUD\\Pictures\\Documents by extension\\",
@@ -31,6 +32,7 @@
         "*.avi",
         "*.wmv",
         "*.srt",
+        "*.csv",
         "*.txt"
       ]
     }
@@ -38,8 +40,7 @@
   "Music": [
     {
       "Action": "Read",
-      "RootSourcePaths": "D:\\MyDrive\\Source\\Music\\",
-      "RootSourcePath": "C:\\Users\\SEDOUD\\CrossDevice\\Galaxy A20e\\storage\\",
+      "RootSourcePath": "D:\\MyDrive\\Music\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "ExtraFileRootSourcePath": "D:\\Result\\Music\\",
       "RootTargetPath": "D:\\MyDrive\\Music\\",
@@ -58,7 +59,8 @@
   "Video": [
     {
       "Action": "Read",
-      "RootSourcePath": "E:\\",
+      "RootSourcePath": "E:\\Series\\Anime\\",
+	  "RootSourcePaths": "E:\\Documentaire\\Arte\\Juifs et musulmans  si loin, si proches\\",
       "RootSourcePaths": "C:\\Users\\SEDOUD\\Videos\\New\\Windows\\video\\",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "RootTargetPath": "D:\\Result\\Video\\",
@@ -177,7 +179,7 @@
   "Gmail": [
     {
       "Action": "Read",
-      "RootSourcePath": "D:\\Projets\\Python\\repos\\py\\Files\\GmailApiSettings.json",
+      "RootSourcePath": "D:\\Projets\\Python\\repos\\py1\\Files\\GmailApiSettings.json",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "RootTargetPath": "D:\\Result\\Gmail\\",
       "FilePatterns": [
@@ -186,7 +188,7 @@
     },
     {
       "Action": "Write",
-      "RootSourcePath": "D:\\Projets\\Python\\repos\\py\\Files\\GmailApiSettings.json",
+      "RootSourcePath": "D:\\Projets\\Python\\repos\\py1\\Files\\GmailApiSettings.json",
       "ExtraFileRootSourcePath": "D:\\Result\\Gmail\\gmailMessageResult.csv",
       "LogRootSourcePath": "D:\\Result\\Logs\\",
       "RootTargetPath": "D:\\Result\\Gmail\\"
