@@ -1,3 +1,4 @@
+import threading
 from collections.abc import Callable
 from typing import Generic, TypeVar, cast
 
@@ -8,12 +9,15 @@ class CLazy(Generic[T]):
         self._factory = factory
         self._value: T | None = None
         self._is_created = False
+        self._lock = threading.Lock()
 
     @property
     def value(self) -> T:
         if not self._is_created:
-            self._value = self._factory()
-            self._is_created = True
+            with self._lock:
+                if not self._is_created:
+                    self._value = self._factory()
+                    self._is_created = True
         return cast(T, self._value)
 
     @property

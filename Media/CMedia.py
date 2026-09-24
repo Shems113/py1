@@ -12,6 +12,7 @@ from Common.CLogger import CLogger as Logger
 from Common.Helpers.Dataframe import data_frame_to_csv
 from Common.Helpers.File import remove_empty_folders
 from Common.Helpers.Json import json_from_file
+from Common.Helpers.System import CPU_COUNT
 
 
 class CMedia:
@@ -57,7 +58,7 @@ class CMedia:
         if self.target_path and not self.target_path.suffix:
             self.target_path.mkdir(parents=True, exist_ok=True)
 
-        self.max_worker = 10
+        self.max_worker = CPU_COUNT
         self.logger = Logger(self.log_paths)
 
     def _resolve_path(

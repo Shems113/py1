@@ -1,3 +1,5 @@
+import ctypes
+import functools
 import json
 import mimetypes
 import subprocess
@@ -9,15 +11,46 @@ import ffmpeg
 import numpy as np  # Importation propre et officielle du package ffmpeg-python
 from av.codec.hwaccel import HWAccel
 
-from Common.Helpers.System import IS_MY_GPU_MACHINE
+from Common.Helpers.System import IS_LINUX, IS_MY_GPU_MACHINE
+
+
+@functools.cache
+def _hw_device() -> str | None:
+    """Accélérateur matériel utilisable sur cette machine, testé une seule fois par processus.
+
+    - Windows (TX16PRO uniquement) : D3D11VA, GPU AMD intégré
+    - Linux : CUDA/NVDEC si une carte NVIDIA est accessible (ex. RTX 4090 sur vast.ai)
+    """
+    if IS_MY_GPU_MACHINE:
+        device = "d3d11va"
+    elif IS_LINUX:
+        device = "cuda"
+    else:
+        return None
+    try:
+        if device == "cuda":
+            # Bibliothèque NVDEC : absente si le conteneur Docker n'expose pas la capacité « video »
+            ctypes.CDLL("libnvcuvid.so.1")
+        # Ouvre réellement le GPU : échoue proprement si aucun périphérique n'est accessible
+        HWAccel(device_type=device).create(av.Codec("h264", "r"))
+    except (OSError, av.FFmpegError):
+        return None
+    print("...............Device is {device}")
+    return device
 
 
 def _open_container(source: str | BinaryIO) -> Any:
-    """Ouvre le conteneur, en décodage GPU si USE_GPU, sinon (ou en cas d'échec) en décodage CPU."""
-    if IS_MY_GPU_MACHINE:
+    """Ouvre le conteneur en décodage GPU si la machine le permet, sinon en décodage CPU.
+
+    Les images décodées restent sur le GPU (is_hw_owned) : aucune copie vers la RAM,
+    suffisant pour compter les frames, mais frame.to_ndarray() n'est alors pas disponible.
+    Les codecs non gérés par le GPU sont décodés par le CPU (allow_software_fallback).
+    """
+    device = _hw_device()
+    if device:
         try:
-            print("USE_GPU")
-            return av.open(source, hwaccel=HWAccel(device_type="d3d11va", allow_software_fallback=True))
+            return av.open(source, hwaccel=HWAccel(
+                device_type=device, allow_software_fallback=True, is_hw_owned=True))
         except (OSError, av.FFmpegError):
             if not isinstance(source, str):
                 source.seek(0)  # flux déjà entamé : on le rembobine avant de réessayer en CPU
@@ -77,6 +110,7 @@ def get_video_corrupted_frames_info(
         source = str(input_source) if isinstance(input_source, (str, Path)) else input_source
         with _open_container(source) as container:
             stream = container.streams.video[0]
+            stream.thread_type = "AUTO"
             hw_decoding = stream.codec_context.is_hwaccel
  
             # Parcours paquet par paquet pour continuer le scan même après une erreur

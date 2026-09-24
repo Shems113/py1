@@ -7,6 +7,7 @@ MY_GPU_MACHINE = "TX16PRO"
 IS_WINDOWS = sys.platform == "win32"
 IS_LINUX = sys.platform == "linux"
 IS_MY_GPU_MACHINE = IS_WINDOWS and CURRENT_MACHINE.upper() == MY_GPU_MACHINE
+CPU_COUNT = os.cpu_count()
 
 def check_required_env_vars(
     service_name: str,
