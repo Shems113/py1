@@ -1,4 +1,3 @@
-import io
 import sys
 from pathlib import Path
 from typing import Any
@@ -46,10 +45,9 @@ class CVideo(CMedia):
         """Lit les flux et métadonnées vidéo et les exporte sous forme de fichiers CSV."""
         if self.is_streaming:
             frame_errors = {}
-            stream_buffer = io.BytesIO(self._chunk_input_stream())
             if self.action_type == EActionType.ReadAndCheck:
                 frame_errors = self.logger.logElapsedTime(
-                    lambda: get_video_corrupted_frames_info(stream_buffer),
+                    lambda: get_video_corrupted_frames_info(sys.stdin.buffer),
                     "Video frames checking from input stream..."
                 )
 
@@ -59,6 +57,7 @@ class CVideo(CMedia):
                 target=sys.stdout,
                 separator=self.data_separator
             )
+            self.logger.log("Writting csv to output stream successful")
         else:
             ensure_ffmpeg_available()
             data = self.process_files_parallel(self._get_video_attributes_fields)

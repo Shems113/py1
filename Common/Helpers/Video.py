@@ -35,9 +35,7 @@ def _hw_device() -> str | None:
         HWAccel(device_type=device).create(av.Codec("h264", "r"))
     except (OSError, av.FFmpegError):
         return None
-    print(f"...............Device is {device}")
-    # return device
-    return None
+    return device
 
 
 def _open_container(source: str | BinaryIO) -> Any:
@@ -47,7 +45,7 @@ def _open_container(source: str | BinaryIO) -> Any:
     suffisant pour compter les frames, mais frame.to_ndarray() n'est alors pas disponible.
     Les codecs non gérés par le GPU sont décodés par le CPU (allow_software_fallback).
     """
-    device = _hw_device()
+    device = None #_hw_device()
     if device:
         try:
             return av.open(source, hwaccel=HWAccel(
@@ -130,7 +128,8 @@ def get_video_corrupted_frames_info(
             "error": f"Erreur ouverture/I-O: {e!s}",
             "corrupted_count": None,
             "corruption_ratio": 0.0,
-            "hw_decoding": None,
+            "hw_device": _hw_device(),
+            "hw_decoding": None
         }
  
     # Calcul du ratio
@@ -141,7 +140,8 @@ def get_video_corrupted_frames_info(
         "total_frames": processed_total,
         "error": first_error,
         "corrupted_count": corrupted_frames,
-        "corruption_ratio": round(ratio, 4),  # ex: 0.0345
+        "corruption_ratio": ratio,  # ex: 0.0345
+        "hw_device": _hw_device(),
         "hw_decoding": hw_decoding,
     }
 
