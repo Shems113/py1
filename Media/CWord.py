@@ -71,7 +71,7 @@ class CWord(CMedia):
     def _word_action(
         self,
         label_prefix: str,
-        document_actions: list[Callable[[Any], Any]],
+        document_actions: list[Callable[[Any], list[str] | str]],
         file_format: int | None = None
     ) -> None:
         for file_path in self.get_source_files():

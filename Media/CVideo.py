@@ -352,7 +352,7 @@ class CVideo(CMedia):
             text = seg["text"].strip()
             return f"{i + 1}\n{start} --> {end}\n{text}\n\n"
 
-        ffmpeg_cmd = [
+        ffmpeg_cmd : list[str] = [
             "ffmpeg",
             "-y",
             "-ss",
@@ -367,7 +367,7 @@ class CVideo(CMedia):
             "aac",
             "-b:a",
             "192k",
-            str(Path(self.target_path) / f"chunk_{i:04d}.m4a"),
+            str(self.target_path / f"chunk_{i:04d}.m4a"),
         ]
 
         return " ".join(ffmpeg_cmd)

@@ -19,8 +19,8 @@ $env:PYTHONOPTIMIZE = 2
 	
 # Arguments transmis au script Python Main.py
 $pythonCommonArgs = @(
-    "--mediaType", "Video",
-    "--actionType", "ReadAndCheck"
+    "--mediaType","File","Video"
+    "--actionType","Read"
 )
 
 # --- Exécution ---
@@ -36,9 +36,9 @@ if ($isStreaming) {
 	
     & $streamingScript -InputFile $inputFile -OutputFile $outputFile -ExecutorExe $pyExe -ExecutorFlags "-OO" -ScriptPath $pyPath -AppArgs $pythonCommonArgs
 } else {
-    # uv run --python $globalEnv $pyPath @pythonCommonArgs
+    uv run --python $globalEnv $pyPath @pythonCommonArgs
 	# 2. Exécution de l'application vidéo seule (CVideoApp.py)
-	uv run --python $globalEnv $pyVPath
+	# uv run --python $globalEnv $pyVPath
 }
 
 # --- Section .NET ---
@@ -77,3 +77,13 @@ if ($isStreaming) {
 
 # Équivalent du pause 
 Read-Host "`nAppuyez sur Entrée pour continuer..."
+
+# C:\Users\SEDOUD\Desktop\PowerShell\parallel_commands.ps1 "C:\Users\SEDOUD\Desktop\PowerShell\commands.txt"
+
+# Get-ChildItem "D:\Result\Video\check_frames" -Filter *.csv | ForEach-Object { $f = $_.FullName; Import-Csv $f -Delimiter ';' -Encoding UTF8 | Select-Object @{n='path'; e={$f}}, * } | Export-Csv "D:\Result\Video\check_frames_all.csv" -Delimiter ';' -NoTypeInformation -Encoding utf8BOM
+
+#uv pip install --upgrade -r requirements.txt
+
+#python -m pip check
+
+# Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned; & D:\Projets\Python\global-env\Scripts\Activate.ps1

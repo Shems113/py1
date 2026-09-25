@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from Common.Helpers.File import PROJECT_ROOT
+
 
 def _resolve_path(file_path: str | Path) -> Path:
     """Helper privé : convertit en Path et résout les chemins relatifs par rapport à la racine du projet."""

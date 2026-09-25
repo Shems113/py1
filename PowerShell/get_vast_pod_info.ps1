@@ -1,60 +1,77 @@
 <#
 .SYNOPSIS
-    Récupère l'IP, le port SSH et l'ID d'un pod actif sur Vast.ai via l'API REST,
-    et vérifie que ffmpeg/ffprobe y sont utilisables (avec l'encodeur AV1 NVENC listé).
+    Récupère l'IP et le port SSH d'un pod Vast.ai actif via l'API REST (mode Simple),
+    ou décrit le pod et contrôle sa capacité à encoder en AV1 (mode Audit).
 
 .DESCRIPTION
-    La clé API est lue dans la variable d'environnement VAST_API_KEY, ou à défaut dans
-    le fichier du CLI vastai (~\.config\vastai\vast_api_key). Elle ne doit JAMAIS être
-    écrite dans ce script (ni dans un commentaire).
+    Deux modes d'appel (comportement identique à get_run_pod_info.ps1) :
 
-    Définition unique de la variable (utilisateur courant, sans laisser la clé dans l'historique) :
+      -Mode Simple (défaut) : aucune connexion SSH. Interroge l'API et renvoie PodId, PodIP, PodPort.
+                              C'est le mode à utiliser depuis d'autres scripts. linux_streaming.ps1,
+                              qui passe -SkipFfmpegCheck, obtient ce mode sans modification.
+
+      -Mode Audit           : en plus, se connecte au pod et affiche un rapport complet :
+                              offre Vast.ai (GPU, CPU, débits annoncés, fiabilité, prix, coût du trafic),
+                              CPU, RAM, disques, GPU (VRAM, driver, PCIe…), réseau Internet du pod,
+                              débit réel PC <-> pod, et contrôle de la chaîne AV1 NVENC (UVM, cuInit,
+                              libcuda compat, test réel, 10 bits, benchmark 4K 10 bits NVDEC -> NVENC)
+                              avec un verdict et les actions à mener.
+                              Nécessite pod_audit_common.ps1 dans le même dossier.
+
+    La clé API est lue dans la variable d'environnement VAST_API_KEY, ou à défaut dans le
+    fichier du CLI vastai (~\.config\vastai\vast_api_key). Elle ne doit JAMAIS être écrite
+    dans ce script (ni dans un commentaire).
+
+    Définition unique de la variable (sans laisser la clé dans l'historique) :
         $k = Read-Host "Clé API Vast.ai" -MaskInput
         [Environment]::SetEnvironmentVariable("VAST_API_KEY", $k, "User")
     puis rouvrir le terminal.
 
-    Sans -InstanceId, le pod actif le plus récent est choisi. S'il y en a plusieurs et que
-    la vérification ffmpeg n'est pas ignorée, les pods sont essayés du plus récent au plus
-    ancien et le premier qui passe le contrôle (ffmpeg + ffprobe présents, encodeur av1_nvenc
-    listé) est retenu. Si aucun ne passe, le plus récent est renvoyé quand même, avec un
-    avertissement — la propriété FfmpegOk du résultat permet à l'appelant de le savoir.
+    Adresse SSH : IP publique + port direct mappé sur 22/tcp ; à défaut, proxy Vast (sshN.vast.ai),
+    qui accepte lui aussi les commandes et SCP.
 
-    QUI FAIT LE CONTRÔLE FFMPEG, ET QUAND :
-      - Lancé directement par toi (à la main, pour inspecter un pod avant de s'en servir) :
-        le contrôle ffmpeg/av1_nvenc est fait PAR DÉFAUT (tu veux savoir si le pod est prêt).
-      - Lancé par Invoke-RemoteStream.ps1 (Resolve-Pod) : ce script appelle celui-ci avec
-        -SkipFfmpegCheck, car il fait ensuite son propre contrôle, plus complet, dans
-        Test-PodPreflight (qui teste aussi le contournement LD_PRELOAD multi-GPU, ce que
-        ce script-ci ne fait pas). Pas de doublon de connexion SSH, démarrage plus rapide ;
-        get_vast_pod_info.ps1 se contente alors de renvoyer les infos du pod.
-      Rien à faire pour obtenir ce comportement : c'est la valeur par défaut de -SkipFfmpegCheck
-      (absent = $false) côté script, et Invoke-RemoteStream.ps1 passe le switch explicitement.
-
-    Ce contrôle ne teste PAS un encodage réel : sur un pod multi-GPU, av1_nvenc peut être
-    listé et pourtant échouer à l'exécution tant que le contournement LD_PRELOAD n'est pas
-    installé (voir Invoke-RemoteStream.ps1 / Test-PodPreflight, qui fait ce test complet).
+.EXAMPLE
+    .\get_vast_pod_info.ps1
+    .\get_vast_pod_info.ps1 -Mode Audit
+    .\get_vast_pod_info.ps1 -Mode Audit -Index 2     # 2e pod de la liste (n°1 = le plus récent)
+    .\get_vast_pod_info.ps1 -Mode Audit -FixCompat
+    .\get_vast_pod_info.ps1 -Mode Audit -All -SkipBenchmark
 #>
 
 [CmdletBinding()]
 param (
+    [ValidateSet("Simple", "Audit")]
+    [string]$Mode = "Simple",
+
     # [string]$VastApiKey = $env:VAST_API_KEY,
 	[string]$VastApiKey = "e6703638ee5f4817205f17fa934a1fa2e85e107ada7de344401d89ddbac76e81",
-	# Run Pod : rpa_RGWYOV61Y09S04MI01YPI0XUNXG1KOLU24F9GZHQ1afrf5
     [string]$InstanceId = "",
+    # N° du pod dans la liste des pods actifs (1 = le plus récent). 0 = comportement par défaut.
+    [ValidateRange(0, 999)]
+    [int]$Index = 0,
+    # Audit : tous les pods actifs au lieu du plus récent
+    [switch]$All,
 
-    # Connexion SSH pour le contrôle ffmpeg côté pod
-    [string]$SSHUser  = "root",
-    [string]$KeyPath  = (Join-Path $env:USERPROFILE ".ssh\id_ed25519"),
-    [string]$SSHExe   = "C:\Windows\System32\OpenSSH\ssh.exe",
+    [string]$SSHUser = "root",
+    [string]$KeyPath = (Join-Path $env:USERPROFILE ".ssh\id_ed25519"),
+    [string]$SSHExe  = "C:\Windows\System32\OpenSSH\ssh.exe",
 
-    # Ignore le contrôle ffmpeg (retour immédiat du pod le plus récent). C'est ce que passe
-    # Invoke-RemoteStream.ps1 quand il appelle ce script : il refait son propre contrôle après.
+    # Options du mode Audit
+    [switch]$SkipNetworkTest,     # pas de test de débit (Internet et PC <-> pod)
+    [switch]$SkipBenchmark,       # pas de benchmark 4K
+    [switch]$NoFfmpegInstall,     # n'installe pas ffmpeg s'il manque (ou s'il n'a pas av1_nvenc)
+    [switch]$FixCompat,           # neutralise la libcuda "compat" de l'image (incompatible GeForce)
+    [int]$LinkTestSizeMB = 64,
+
+    # Compatibilité avec linux_streaming.ps1 : force le mode Simple
     [switch]$SkipFfmpegCheck
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding           = [System.Text.Encoding]::UTF8
+if ($SkipFfmpegCheck) { $Mode = "Simple" }
 
+# ---------------------------------------------------------------- Clé API
 # Repli : clé déjà enregistrée par `vastai set api-key` (fichier du CLI, hors de ce script)
 if ([string]::IsNullOrWhiteSpace($VastApiKey)) {
     $cliKeyFile = Join-Path $env:USERPROFILE ".config\vastai\vast_api_key"
@@ -62,61 +79,18 @@ if ([string]::IsNullOrWhiteSpace($VastApiKey)) {
         $VastApiKey = (Get-Content -LiteralPath $cliKeyFile -Raw).Trim()
     }
 }
-
 if ([string]::IsNullOrWhiteSpace($VastApiKey)) {
     Write-Host "[ERREUR] Clé API Vast.ai absente : définissez VAST_API_KEY ou lancez 'vastai set api-key' (voir l'aide du script)." -ForegroundColor Red
     exit 1
 }
 
-function Test-PodFfmpeg {
-    param ([string]$PodIP, [string]$PodPort)
-
-    $result = [pscustomobject]@{
-        SshOk          = $false
-        FfmpegOk       = $false
-        FfprobeOk      = $false
-        Av1NvencListed = $false
-        Output         = ""
-    }
-
-    if (-not (Test-Path -LiteralPath $SSHExe)) {
-        $result.Output = "ssh.exe introuvable ($SSHExe) : contrôle ffmpeg ignoré."
-        return $result
-    }
-
-    $sshOptions = @(
-        "-T", "-p", $PodPort, "-i", $KeyPath,
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null",
-        "-o", "BatchMode=yes",
-        "-o", "ConnectTimeout=10"
-    )
-    $remoteCheck = 'echo SSH_OK; ' +
-        '(command -v ffmpeg >/dev/null 2>&1 && echo FFMPEG_OK || echo FFMPEG_MISSING); ' +
-        '(command -v ffprobe >/dev/null 2>&1 && echo FFPROBE_OK || echo FFPROBE_MISSING); ' +
-        '(ffmpeg -hide_banner -encoders 2>/dev/null | grep -q av1_nvenc && echo AV1_NVENC_OK || echo AV1_NVENC_MISSING)'
-
-    $raw  = & $SSHExe @sshOptions "${SSHUser}@${PodIP}" $remoteCheck 2>&1
-    $text = ($raw | Out-String).Trim()
-
-    $result.Output         = $text
-    $result.SshOk          = $LASTEXITCODE -eq 0 -and $text -match "SSH_OK"
-    $result.FfmpegOk       = $text -match "FFMPEG_OK"
-    $result.FfprobeOk      = $text -match "FFPROBE_OK"
-    $result.Av1NvencListed = $text -match "AV1_NVENC_OK"
-    return $result
-}
-
+# ---------------------------------------------------------------- API
 # La clé passe dans l'en-tête Authorization (et non dans l'URL, où elle finit dans les journaux).
 # La barre finale est volontaire : sans elle, une redirection peut faire perdre l'en-tête Authorization (HTTP 403).
 $ApiUrl  = "https://console.vast.ai/api/v1/instances/"
-$Headers = @{
-    Authorization = "Bearer $VastApiKey"
-    Accept        = "application/json"
-}
+$Headers = @{ Authorization = "Bearer $VastApiKey"; Accept = "application/json" }
 
-Write-Host "[1/4] Interrogation de l'API REST Vast.ai..." -ForegroundColor Yellow
-
+Write-Host "[1/3] Interrogation de l'API Vast.ai..." -ForegroundColor Yellow
 try {
     $Response = Invoke-WebRequest -Uri $ApiUrl -Headers $Headers -Method Get -TimeoutSec 20 -PreserveAuthorizationOnRedirect -ErrorAction Stop
     # -AsHashtable : gère la clé vide ("") de label_counts, qui casse un objet classique
@@ -132,126 +106,186 @@ catch {
     exit 1
 }
 
-Write-Host "[2/4] Analyse de la réponse API..." -ForegroundColor Yellow
-
 if ($Data['success'] -eq $false) {
     Write-Host "[ERREUR] L'API Vast.ai a retourné une erreur : $($Data['msg'])" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "      Instances trouvées : $($Data['instances_found'])" -ForegroundColor Cyan
-
 # @() garantit un tableau même s'il n'y a qu'une instance (ou aucune)
-$Instances = @($Data['instances'])
-$RunningPods = @($Instances | Where-Object {
+$Running = @(@($Data['instances']) | Where-Object {
     $_ -is [hashtable] -and ($_['cur_state'] -eq 'running' -or $_['actual_status'] -eq 'running')
 })
-
-if ($RunningPods.Count -eq 0) {
+Write-Host "      Pods actifs : $($Running.Count)" -ForegroundColor Cyan
+if ($Running.Count -eq 0) {
     Write-Host "[ERREUR] Aucun pod en cours d'exécution n'a été trouvé." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "[3/4] Sélection du pod..." -ForegroundColor Yellow
+# ---------------------------------------------------------------- Sélection
+Write-Host "[2/3] Sélection du pod..." -ForegroundColor Yellow
 
-if ($InstanceId) {
-    $Candidates = @($RunningPods | Where-Object { [string]$_['id'] -eq $InstanceId })
-    if ($Candidates.Count -eq 0) {
-        Write-Host "[ERREUR] Le pod ${InstanceId} n'existe pas ou n'est pas en cours d'exécution." -ForegroundColor Red
-        exit 1
-    }
-}
-else {
-    $Candidates = @($RunningPods | Sort-Object { [double]$_['start_date'] } -Descending)
-    if ($Candidates.Count -gt 1) {
-        $ids = ($Candidates | ForEach-Object { $_['id'] }) -join ", "
-        Write-Host "[INFO] Plusieurs pods actifs ($ids) : essai du plus récent au plus ancien. Utilisez -InstanceId pour en forcer un." -ForegroundColor Cyan
-    }
-}
-
-function Resolve-PodAddress {
-    param ($TargetPod)
-
-    # Adresse SSH : IP publique + port direct mappé sur 22/tcp ; à défaut, proxy Vast (hôte ET port du proxy)
-    $portMap = $TargetPod['ports']
-    if ($TargetPod['public_ipaddr'] -and $portMap -and $portMap['22/tcp']) {
+function Resolve-VastAddress {
+    param ($Pod)
+    $portMap = $Pod['ports']
+    if ($Pod['public_ipaddr'] -and $portMap -and $portMap['22/tcp']) {
         return [pscustomobject]@{
-            PodIP   = ([string]$TargetPod['public_ipaddr']).Trim()
-            PodPort = $portMap['22/tcp'][0]['HostPort']
+            PodIP   = ([string]$Pod['public_ipaddr']).Trim()
+            PodPort = [string]$portMap['22/tcp'][0]['HostPort']
             Mode    = "direct"
         }
     }
-    elseif ($TargetPod['ssh_host'] -and $TargetPod['ssh_port']) {
-        return [pscustomobject]@{
-            PodIP   = $TargetPod['ssh_host']
-            PodPort = $TargetPod['ssh_port']
-            Mode    = "proxy"
-        }
+    elseif ($Pod['ssh_host'] -and $Pod['ssh_port']) {
+        return [pscustomobject]@{ PodIP = [string]$Pod['ssh_host']; PodPort = [string]$Pod['ssh_port']; Mode = "proxy" }
     }
     return $null
 }
 
-$TargetPod  = $null
-$Address    = $null
-$FfmpegInfo = $null
+# Liste numérotée : n°1 = pod démarré le plus récemment (même pod que le choix par défaut)
+$Ordered = @($Running | Sort-Object { [double]$_['start_date'] } -Descending)
 
-foreach ($candidate in $Candidates) {
-    $addr = Resolve-PodAddress -TargetPod $candidate
-    if (-not $addr) {
-        Write-Host "[AVERTISSEMENT] Pod $($candidate['id']) : IP ou port SSH introuvable, ignoré." -ForegroundColor Yellow
-        continue
+if ($Index -gt 0 -or $Ordered.Count -gt 1) {
+    Write-Host "      Pods actifs (n°1 = le plus récent) :" -ForegroundColor Cyan
+    for ($i = 0; $i -lt $Ordered.Count; $i++) {
+        $p    = $Ordered[$i]
+        $addr = Resolve-VastAddress $p
+        $ssh  = if ($addr) { "$($addr.PodIP):$($addr.PodPort) ($($addr.Mode))" } else { "SSH indisponible" }
+        $mark = if ($Index -eq $i + 1) { "►" } else { " " }
+        Write-Host ("      {0} Vast_{1,-3} {2,-10} {3,-26} {4}" -f $mark, ($i + 1), $p['id'], "$($p['gpu_name']) x$($p['num_gpus'])", $ssh) -ForegroundColor Gray
     }
-
-    if ($SkipFfmpegCheck) {
-        $TargetPod = $candidate; $Address = $addr
-        break
-    }
-
-    Write-Host "      Contrôle ffmpeg sur le pod $($candidate['id']) ($($addr.PodIP):$($addr.PodPort))..." -ForegroundColor Cyan
-    $check = Test-PodFfmpeg -PodIP $addr.PodIP -PodPort $addr.PodPort
-
-    if (-not $check.SshOk) {
-        Write-Host "[AVERTISSEMENT] Pod $($candidate['id']) : connexion SSH impossible, ignoré." -ForegroundColor Yellow
-        continue
-    }
-    if ($check.FfmpegOk -and $check.FfprobeOk -and $check.Av1NvencListed) {
-        Write-Host "[OK] Pod $($candidate['id']) : ffmpeg, ffprobe et av1_nvenc présents." -ForegroundColor Green
-        $TargetPod = $candidate; $Address = $addr; $FfmpegInfo = $check
-        break
-    }
-
-    if (-not $TargetPod) { $TargetPod = $candidate; $Address = $addr; $FfmpegInfo = $check }
-    $missing = @()
-    if (-not $check.FfmpegOk)       { $missing += "ffmpeg" }
-    if (-not $check.FfprobeOk)      { $missing += "ffprobe" }
-    if (-not $check.Av1NvencListed) { $missing += "av1_nvenc" }
-    Write-Host "[AVERTISSEMENT] Pod $($candidate['id']) : manque $($missing -join ', ') — essai du pod suivant s'il y en a un." -ForegroundColor Yellow
 }
 
-if (-not $TargetPod) {
+if ($InstanceId) {
+    $Candidates = @($Running | Where-Object { [string]$_['id'] -eq $InstanceId })
+    if ($Candidates.Count -eq 0) {
+        Write-Host "[ERREUR] Le pod ${InstanceId} n'existe pas ou n'est pas en cours d'exécution." -ForegroundColor Red
+        exit 1
+    }
+} elseif ($Index -gt 0) {
+    if ($Index -gt $Ordered.Count) {
+        Write-Host "[ERREUR] Vast_${Index} demandé, mais seulement $($Ordered.Count) pod(s) actif(s)." -ForegroundColor Red
+        exit 1
+    }
+    $Candidates = @($Ordered[$Index - 1])
+} else {
+    $Candidates = $Ordered
+}
+
+$Usable = [System.Collections.Generic.List[object]]::new()
+foreach ($p in $Candidates) {
+    $addr = Resolve-VastAddress $p
+    if ($addr) { $Usable.Add([pscustomobject]@{ Pod = $p; Address = $addr }) }
+    else { Write-Host "[AVERTISSEMENT] Pod $($p['id']) ignoré : IP ou port SSH introuvable (pod encore en démarrage ?)." -ForegroundColor Yellow }
+}
+if ($Usable.Count -eq 0) {
+    if ($Index -gt 0) { Write-Host "[ERREUR] Vast_${Index} n'est pas joignable en SSH (voir la raison ci-dessus) : choisis un autre n°." -ForegroundColor Red; exit 1 }
     Write-Host "[ERREUR] Aucun pod actif n'a une adresse SSH exploitable." -ForegroundColor Red
     exit 1
 }
-
-$PodId   = $TargetPod['id']
-$PodIP   = $Address.PodIP
-$PodPort = $Address.PodPort
-$Mode    = $Address.Mode
-
-$FfmpegOk = if ($SkipFfmpegCheck) { $null } else { [bool]($FfmpegInfo.FfmpegOk -and $FfmpegInfo.FfprobeOk -and $FfmpegInfo.Av1NvencListed) }
-
-if ($FfmpegOk -eq $false) {
-    $indented = $FfmpegInfo.Output -replace "`n", "`n  "
-    Write-Host "[AVERTISSEMENT] Le pod retenu (${PodId}) n'a pas passé le contrôle ffmpeg/av1_nvenc. Détail :" -ForegroundColor Yellow
-    Write-Host "  $indented" -ForegroundColor DarkGray
+if ($Usable.Count -gt 1 -and -not $InstanceId -and $Index -eq 0 -and -not $All) {
+    $ids = ($Usable | ForEach-Object { $_.Pod['id'] }) -join ", "
+    Write-Host "[INFO] Plusieurs pods actifs ($ids) : le plus récent est retenu. -InstanceId pour en choisir un$(if ($Mode -eq 'Audit') { ', -All pour tous les auditer' })." -ForegroundColor Cyan
 }
 
-Write-Host "[4/4] Extraction réussie !" -ForegroundColor Yellow
-Write-Host "[OK] Pod détecté (ID: ${PodId}, connexion ${Mode}) -> IP: ${PodIP} | Port: ${PodPort}" -ForegroundColor Green
+$Targets = if ($Mode -eq 'Audit' -and $All) { @($Usable) } else { @($Usable[0]) }
 
-return [PSCustomObject]@{
-    PodId    = [string]$PodId
-    PodIP    = [string]$PodIP
-    PodPort  = [string]$PodPort
-    FfmpegOk = $FfmpegOk
+# ---------------------------------------------------------------- Mode Simple
+if ($Mode -eq 'Simple') {
+    $t = $Targets[0]
+    Write-Host "[3/3] Extraction réussie !" -ForegroundColor Yellow
+    Write-Host "[OK] Pod détecté (ID: $($t.Pod['id']), connexion $($t.Address.Mode)) -> IP: $($t.Address.PodIP) | Port: $($t.Address.PodPort)" -ForegroundColor Green
+    return [pscustomobject]@{
+        Provider = "Vast.ai"
+        PodId    = [string]$t.Pod['id']
+        PodIP    = [string]$t.Address.PodIP
+        PodPort  = [string]$t.Address.PodPort
+        FfmpegOk = $null
+    }
 }
+
+# ---------------------------------------------------------------- Mode Audit
+$common = Join-Path $PSScriptRoot "pod_audit_common.ps1"
+if (-not (Test-Path -LiteralPath $common)) {
+    Write-Host "[ERREUR] Mode Audit : fichier introuvable $common" -ForegroundColor Red
+    exit 1
+}
+. $common
+
+if (-not (Test-Path -LiteralPath $SSHExe)) {
+    Write-Host "[ERREUR] ssh.exe introuvable ($SSHExe)." -ForegroundColor Red
+    exit 1
+}
+
+function Get-VastApiInfo {
+    param ($Pod, $Address)
+    $v = { param ($k) $x = $Pod[$k]; if ($null -ne $x -and "$x" -ne '') { $x } else { $null } }
+    $num = { param ($k, $fmt, $div = 1) $x = & $v $k; if ($null -ne $x) { $fmt -f ([double]$x / $div) } else { $null } }
+
+    $uptime = $null; $spent = $null
+    if (& $v 'start_date') {
+        $started = [DateTimeOffset]::FromUnixTimeSeconds([long][double]$Pod['start_date']).LocalDateTime
+        $h = ((Get-Date) - $started).TotalHours
+        $uptime = "{0:0.0} h (depuis {1:dd/MM HH:mm})" -f $h, $started
+        if (& $v 'dph_total') { $spent = "{0:0.00} $" -f ($h * [double]$Pod['dph_total']) }
+    }
+    $cc = & $v 'compute_cap'
+    if ($cc -and "$cc" -match '^\d{3}$') { $cc = "{0}.{1}" -f "$cc".Substring(0, 1), "$cc".Substring(1, 1) }
+    $traffic = if ((& $v 'inet_up_cost') -or (& $v 'inet_down_cost')) {
+        "montant {0:0.000} $/Go, descendant {1:0.000} $/Go" -f [double]$Pod['inet_up_cost'], [double]$Pod['inet_down_cost']
+    }
+    $ssh = if ($Address.Mode -eq 'direct') { "ssh $SSHUser@$($Address.PodIP) -p $($Address.PodPort)" } else { "ssh $SSHUser@$($Address.PodIP) -p $($Address.PodPort)  (proxy Vast)" }
+
+    return [ordered]@{
+        "Nom / ID"              = "$(& $v 'label') / $($Pod['id'])"
+        "SSH"                   = $ssh
+        "Machine / hôte"        = "$(& $v 'machine_id') / $(& $v 'host_id')"
+        "Localisation"          = & $v 'geolocation'
+        "Fiabilité hôte"        = & $num 'reliability2' '{0:P1}'
+        "GPU (offre)"           = "$(& $v 'gpu_name') x$(& $v 'num_gpus')"
+        "VRAM / bande passante" = "$(& $num 'gpu_ram' '{0:0.0} Go' 1024) / $(& $num 'gpu_mem_bw' '{0:0} Go/s')"
+        "Compute capability"    = $cc
+        "Driver / CUDA max"     = "$(& $v 'driver_version') / $(& $v 'cuda_max_good')"
+        "PCIe"                  = "Gen$(& $v 'pci_gen') x$(& $v 'gpu_lanes') ($(& $num 'pcie_bw' '{0:0.0} Go/s'))"
+        "CPU"                   = "$(& $v 'cpu_name') ($(& $num 'cpu_cores_effective' '{0:0.#}') cœurs effectifs sur $(& $v 'cpu_cores'))"
+        "RAM (offre)"           = & $num 'cpu_ram' '{0:0} Go' 1024
+        "Disque"                = "$(& $num 'disk_space' '{0:0} Go') $(& $v 'disk_name') ($(& $num 'disk_bw' '{0:0} Mo/s'))"
+        "Débit annoncé"         = "$(& $num 'inet_down' '{0:0}') Mbit/s desc. / $(& $num 'inet_up' '{0:0}') Mbit/s mont."
+        "Image"                 = & $v 'image_uuid'
+        "Prix"                  = & $num 'dph_total' '{0:0.000} $/h'
+        "Coût du trafic"        = $traffic
+        "En marche depuis"      = $uptime
+        "Coût depuis démarrage" = $spent
+    }
+}
+
+$Results = foreach ($t in $Targets) {
+    $pod = $t.Pod; $addr = $t.Address
+    Write-Host "[3/3] Audit du pod $($pod['id']) ($($addr.PodIP):$($addr.PodPort)) : 1 à 3 minutes…" -ForegroundColor Yellow
+
+    $audit = Invoke-PodAudit -PodIP $addr.PodIP -PodPort $addr.PodPort -SSHUser $SSHUser -KeyPath $KeyPath -SSHExe $SSHExe `
+        -NetTest (-not $SkipNetworkTest) -Bench (-not $SkipBenchmark) -Install (-not $NoFfmpegInstall) -FixCompat $FixCompat
+
+    $link = $null
+    if ($audit['SSH'] -eq 'OK' -and -not $SkipNetworkTest) {
+        Write-Host "      Mesure du débit PC <-> pod ($LinkTestSizeMB Mo)…" -ForegroundColor Cyan
+        $link = Measure-PodLink -PodIP $addr.PodIP -PodPort $addr.PodPort -SSHUser $SSHUser -KeyPath $KeyPath -SSHExe $SSHExe -SizeMB $LinkTestSizeMB
+    }
+
+    $verdict = Get-PodVerdict $audit
+    Write-PodReport -Title "Vast.ai — $($pod['label']) ($($pod['id']))" -ApiInfo (Get-VastApiInfo $pod $addr) -Audit $audit -Link $link -Verdict $verdict
+
+    $fps = 0; [void][int]::TryParse("$($audit['BENCH_4K_FPS'])", [ref]$fps)
+    Set-PodResultDisplay ([pscustomobject]@{
+        Provider        = "Vast.ai"
+        PodId           = [string]$pod['id']
+        PodIP           = [string]$addr.PodIP
+        PodPort         = [string]$addr.PodPort
+        FfmpegOk        = [bool]($audit['FFMPEG'] -and $audit['FFMPEG'] -ne 'absent' -and $audit['FFPROBE'] -ne 'absent' -and $audit['ENC_av1_nvenc'] -eq 'oui')
+        Av1EncodeOk     = $verdict.Av1Ok
+        Av1NeedsPreload = $verdict.NeedsPreload
+        HostLibCuda     = $audit['LIBCUDA_HOST']
+        Bench4kFps      = $(if ($fps -gt 0) { $fps } else { $null })
+        Verdict         = $verdict.Level
+        Audit           = $audit
+    })
+}
+return $Results

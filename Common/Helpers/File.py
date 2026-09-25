@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # Formats Word COM (16: docx, 17: pdf)
 WORD_FORMAT_EXTENSIONS = {
     16: None,  # Garde l'extension d'origine (.docx / .doc)

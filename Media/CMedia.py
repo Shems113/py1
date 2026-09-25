@@ -10,7 +10,7 @@ import pandas as pd
 
 from Common.CLogger import CLogger as Logger
 from Common.Helpers.Dataframe import data_frame_to_csv
-from Common.Helpers.File import remove_empty_folders
+from Common.Helpers.File import PROJECT_ROOT, remove_empty_folders
 from Common.Helpers.Json import json_from_file
 from Common.Helpers.System import CPU_COUNT
 
@@ -27,9 +27,6 @@ class CMedia:
         self.action_type = action_type
         self.is_streaming = not sys.stdin.isatty()
         self.data_separator: str = ";"
-
-        # Détermination dynamique de la racine du projet
-        self.project_root: Path = Path(__file__).resolve().parents[1]
 
         # Chargement de la configuration
         self.item: dict[str, Any] = self._load_item(Path(self.json_path))
@@ -67,13 +64,13 @@ class CMedia:
         ) -> Path:
         """Résout un chemin de manière générique : absolu s'il l'est, sinon relatif à la racine du projet."""
         if not raw_path:
-            return self.project_root
+            return PROJECT_ROOT
 
         path_obj = Path(str(raw_path))
         if path_obj.is_absolute():
             return path_obj
 
-        return self.project_root / path_obj
+        return PROJECT_ROOT / path_obj
 
     def _load_item(
         self,

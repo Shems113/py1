@@ -35,8 +35,9 @@ ACTION_MAPPING: dict[EActionType, str] = {
     EActionType.TranscribeAndCheck: "transcribeAndCheck",
 }
 
+
 def process(
-    media: File | Gmail | Music | Video | Word, action_name: str
+    media: File | Gmail | Music | Subtitle | Video | Word, action_name: str
 ) -> None:
     """Initialise les logs et exécute la méthode d'action sur l'instance de média."""
     if hasattr(media, action_name) and callable(getattr(media, action_name)):
@@ -59,29 +60,33 @@ def main() -> None:
     parser.add_argument(
         "--mediaType",
         type=str,
-        help="Type of media",
-        default=DEFAULT_MEDIA.name,
+        nargs="+",
+        help="One or more media types",
+        default=[DEFAULT_MEDIA.name],
     )
     parser.add_argument(
         "--actionType",
         type=str,
-        help="Type of action",
-        default=DEFAULT_ACTION.name,
+        nargs="+",
+        help="One or more action types",
+        default=[DEFAULT_ACTION.name],
     )
     args = parser.parse_args()
 
-    # Récupération de l'action et du type de média depuis les énumérations
-    action_type = getattr(EActionType, args.actionType)
-    media_type = getattr(EMediaType, args.mediaType)
+    # Chaque action est appliquée à chaque média
+    json_path = Path(args.jsonPath)
+    media_types = [getattr(EMediaType, name) for name in args.mediaType]
+    action_types = [getattr(EActionType, name) for name in args.actionType]
 
-    # Instanciation et exécution
-    media_class = MEDIA_MAPPING[media_type]
-    media_instance = media_class(
-        Path(args.jsonPath), action_type
-    )
-    action_name = ACTION_MAPPING[action_type]
-    process(media_instance, action_name)
+    for media_type in media_types:
+        media_class = MEDIA_MAPPING[media_type]
 
+        for action_type in action_types:
+            action_name = ACTION_MAPPING[action_type]
+
+            # Instanciation et exécution
+            media_instance = media_class(json_path, action_type)
+            process(media_instance, action_name)
 
 if __name__ == "__main__":
     main()

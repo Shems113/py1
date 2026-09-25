@@ -21,7 +21,7 @@ class CTorrentManager:
         self,
         logsPath:Path|str):
         # Enregistrement dynamique de l'ensemble des scrapers
-        self.logger = Logger(logsPath)
+        self.logger = Logger([str(logsPath)])
         self.scrapers: dict[TorrentSource, CCommonTorrent] = {
             TorrentSource.YTS: CScraperYts(self.logger),
             TorrentSource.LIMETORRENTS: CScraperLimeTorrents(self.logger),
@@ -213,7 +213,7 @@ class CTorrentManager:
 
 
 if __name__ == "__main__":
-    manager = CTorrentManager()
+    manager = CTorrentManager("")
 
     # Test de santé des sources
     manager.check_sources_health()

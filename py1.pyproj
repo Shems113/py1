@@ -74,9 +74,11 @@
     <Content Include="Files\GmailApiSettings.json" />
     <Content Include="Files\LinuxSettings.json" />
     <Content Include="Files\WindowsSettings.json" />
+    <Content Include="PowerShell\get_run_pod_info.ps1" />
     <Content Include="PowerShell\get_vast_pod_info.ps1" />
     <Content Include="PowerShell\linux_deploy_python.ps1" />
     <Content Include="PowerShell\linux_streaming.ps1" />
+    <Content Include="PowerShell\pod_audit_common.ps1" />
     <Content Include="requirements.txt" />
     <Content Include="ruff.toml" />
     <Content Include="Templates\index.html" />

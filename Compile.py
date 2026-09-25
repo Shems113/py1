@@ -25,7 +25,8 @@ from mypy import api as mypy_api
 from packaging.requirements import InvalidRequirement, Requirement
 from ruff.__main__ import find_ruff_bin
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+from Common.Helpers.File import PROJECT_ROOT
+
 REQUIREMENTS_FILE = PROJECT_ROOT / "requirements.txt"
 THIS_FILE = Path(__file__).resolve()
 

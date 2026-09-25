@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Streaming Windows -> pod Linux (Vast.ai, RunPod à venir) : transcription, encodage AV1, contrôle des frames.
+    Streaming Windows -> pod Linux (Vast.ai ou RunPod) : transcription, encodage AV1, contrôle des frames.
 
 .DESCRIPTION
     Un seul schéma pour tous les modes :
@@ -8,7 +8,34 @@
       2) FLUX de streaming             -> Invoke-StreamEngine    (commun à tous les modes)
       3) JOURNAUX d'audit              -> Write-Log              (console + fichier optionnel)
       4) POST-TRAITEMENT de la sortie  -> Complete-StreamOutput  (switch sur le mode)
-    Une vérification préalable du pod (Test-PodPreflight) évite d'envoyer des Go vers un pod inutilisable.
+
+    SAUT SI DÉJÀ FAIT : si le fichier de sortie (-OutputFile) existe déjà, le traitement est
+    sauté immédiatement (code de sortie 0, aucun contact avec le pod). -Force pour le refaire.
+    Pratique pour relancer un lot interrompu : seuls les fichiers manquants sont traités.
+
+    CHOIX DU POD : -Pod "<Plateforme>[_<N>]"
+        Vast (défaut) = Vast_1, Vast_2, RunPod = RunPod_1, RunPod_3...
+        N°1 = pod démarré le plus récemment ; la liste numérotée est affichée à chaque lancement.
+        -PodHost / -PodPort court-circuitent la recherche (usage en lot).
+
+    VÉRIFICATION DU POD (Test-PodPreflight), avant d'envoyer la moindre donnée. Volontairement
+    légère (quelques secondes) : l'audit complet se fait en amont, au déploiement
+    (linux_deploy_python.ps1, qui installe aussi ffmpeg et peut corriger la libcuda « compat »).
+      - connexion SSH ;
+      - EncodeAV1 : ffmpeg présent, test AV1 NVENC 10 bits natif puis, en cas d'échec, avec la
+        libcuda de l'hôte forcée (LD_PRELOAD) : parade à une libcuda « compat » non corrigée ;
+        puis test du décodage sur GPU (voir ci-dessous) ;
+      - Transcribe / CheckFrames : environnement Python du projet présent.
+      -SkipPreflight supprime cette vérification (lot sur un pod déjà validé).
+
+    DÉCODAGE SUR GPU (EncodeAV1, -Decode Auto par défaut) : la source est décodée par le décodeur
+    matériel de la carte (NVDEC) au lieu du CPU du pod, et les images restent dans la mémoire du GPU
+    jusqu'à l'encodeur AV1 (NVENC). Gain net quand le CPU du pod saturait (source 4K, peu de vCPU).
+    Choisi seulement si le codec de la source est décodable par NVDEC (H.264 8 bits, HEVC 8/10 bits,
+    AV1, VP9, MPEG-2, VC-1) ET si un test réel sur le pod réussit ; sinon, décodage CPU comme avant.
+    -Decode Cpu force l'ancien fonctionnement, -Decode Gpu force le GPU.
+
+    Scripts requis dans le même dossier : get_vast_pod_info.ps1, get_run_pod_info.ps1.
 
     Modes :
       Transcribe   : audio PCM 16 kHz -> Main.py (Transcribe) -> CSV, puis SRT
@@ -20,17 +47,20 @@
       - l'ajouter au ValidateSet de -Mode ;
       - ajouter un case dans New-StreamPlan, Test-PodPreflight et Complete-StreamOutput ;
       - écrire New-<Mode>Plan et Complete-<Mode> en s'inspirant de ceux des modes existants.
-    AJOUTER UN FOURNISSEUR (RunPod...) : ajouter un case dans Resolve-Pod.
+    AJOUTER UN FOURNISSEUR : un script get_<x>_pod_info.ps1 (mêmes paramètres et même objet
+    renvoyé que les deux existants) et une entrée dans $Config.GetPodScripts.
 
 .EXAMPLE
-    .\Invoke-RemoteStream.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1_AV1.mp4"
+    .\linux_streaming.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1_AV1.mp4"                 # 1er pod Vast.ai
 .EXAMPLE
-    .\Invoke-RemoteStream.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1.csv" -Mode Transcribe
+    .\linux_streaming.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1_AV1.mp4" -Pod RunPod_2
 .EXAMPLE
-    .\Invoke-RemoteStream.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1_frames.csv" -Mode CheckFrames -LogFile "D:\Out\audit.log"
+    .\linux_streaming.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1.csv" -Mode Transcribe -Pod Vast_2
 .EXAMPLE
-    # Lot : détection du pod faite une fois, pas de pré-vérification répétée
-    .\Invoke-RemoteStream.ps1 "a.mp4" "a_AV1.mp4" -PodHost 1.2.3.4 -PodPort 50367 -SkipPreflight -Preset p5
+    .\linux_streaming.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1_frames.csv" -Mode CheckFrames -LogFile "D:\Out\audit.log"
+.EXAMPLE
+    # Lot : IP/port connus ; les fichiers déjà produits sont sautés
+    .\linux_streaming.ps1 "a.mp4" "a_AV1.mp4" -PodHost 1.2.3.4 -PodPort 50367 -Preset p5
 #>
 
 [CmdletBinding()]
@@ -46,14 +76,21 @@ param (
     [ValidateSet("Auto", "Transcribe", "EncodeAV1", "CheckFrames")]
     [string]$Mode = "Auto",
 
-    # Fournisseur du pod : détermine comment on trouve IP et port SSH
-    [ValidateSet("Vast", "RunPod", "Manual")]
-    [string]$Provider = "Vast",
+    # Plateforme et n° du pod : "Vast", "Vast_2", "RunPod", "RunPod_3"... (n°1 = le plus récent)
+    [string]$Pod = "Vast",
 
     # Contournent la détection (utile en lot : détecter une fois, réutiliser)
     [string]$PodHost = "",
     [string]$PodPort = "",
     [string]$SSHUser = "root",
+
+
+    # Refait le traitement même si le fichier de sortie existe déjà
+    [switch]$Force,
+
+    # Ancien paramètre, gardé pour compatibilité : équivaut à -Pod <Provider>
+    [ValidateSet("", "Vast", "RunPod", "Manual")]
+    [string]$Provider = "",
 
     # Paramètres du projet Python distant
     [ValidatePattern('^[A-Za-z0-9_\-]+$')]
@@ -66,6 +103,12 @@ param (
     [int]$CQ = 34,
     [ValidateSet("p1", "p2", "p3", "p4", "p5", "p6", "p7")]
     [string]$Preset = "p7",
+
+    # Décodage de la source sur le pod (mode EncodeAV1) :
+    #   Auto : sur le GPU (NVDEC) si le codec de la source le permet ET si le test du pod réussit, sinon CPU
+    #   Gpu  : force le GPU (sans test si -SkipPreflight)      Cpu : force le CPU (comportement d'avant)
+    [ValidateSet("Auto", "Gpu", "Cpu")]
+    [string]$Decode = "Auto",
 
     # Ignore la vérification du pod (à réserver aux lots sur un pod déjà validé)
     [switch]$SkipPreflight,
@@ -82,9 +125,10 @@ param (
 # ============================================================================
 
 $Config = @{
-    GetVastPodScript = Join-Path $PSScriptRoot "get_vast_pod_info.ps1"
-    NvencFixSource   = Join-Path $PSScriptRoot "nvenc_fix.c"
-    NvencFixRemote   = "/opt/libnvenc_fix.so"
+    GetPodScripts    = @{
+        Vast   = Join-Path $PSScriptRoot "get_vast_pod_info.ps1"
+        RunPod = Join-Path $PSScriptRoot "get_run_pod_info.ps1"
+    }
     KeyPath          = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
     SSHExe           = "C:\Windows\System32\OpenSSH\ssh.exe"
     SCPExe           = "C:\Windows\System32\OpenSSH\scp.exe"
@@ -97,14 +141,21 @@ $Config = @{
 $OutputEncoding           = [System.Text.Encoding]::UTF8
 
 $script:LogPath    = $LogFile
-$script:Pod        = $null
+$script:PodInfo        = $null
 $script:SshOptions = @()
 $script:SshTarget  = ""
-# Déterminé par Test-PodPreflight (mode EncodeAV1) : la plupart des pods (hôte mono-GPU,
-# ou déjà à jour) n'ont pas besoin du contournement LD_PRELOAD - il n'est activé que si
-# av1_nvenc échoue réellement sans lui. Reste à $false si -SkipPreflight (on fait confiance
-# à l'appelant, pas de LD_PRELOAD vers un .so qui n'existe peut-être pas sur ce pod).
-$script:NvencFixNeeded = $false
+# Chemin de la libcuda de l'HÔTE à forcer via LD_PRELOAD pour ffmpeg (mode EncodeAV1).
+# Nécessaire quand l'image embarque une libcuda « compat » (ex. 595 dans /usr/local/cuda-*/compat)
+# plus récente que le driver de l'hôte : non supportée sur GeForce, elle fait échouer cuInit.
+# Déterminé par Test-PodPreflight ; reste vide si av1_nvenc marche nativement
+# ou avec -SkipPreflight.
+$script:NvencPreload = ""
+# Décodage de la source sur le GPU (NVDEC) : la vidéo reste dans la mémoire de la carte du décodage
+# à l'encodage, le CPU du pod n'a presque plus rien à faire. Déterminé par Resolve-DecodePath.
+$script:GpuDecode    = $false
+$script:SourceVideo  = $null
+$script:PodPlatform  = ""
+$script:PodIndex     = 1
 
 # ============================================================================
 # JOURNAUX
@@ -152,46 +203,49 @@ function New-PythonCommand {
 # POD : DÉTECTION PAR FOURNISSEUR, SSH, COPIE
 # ============================================================================
 
+# "Vast", "Vast_2", "RunPod", "RunPod_3" (casse indifférente ; "VastAi", "Vast.ai-2" acceptés)
+function Resolve-PodSelector {
+    param ([string]$Selector)
+
+    $m = [regex]::Match($Selector.Trim(), '^(?<plat>vast(?:[\.\s]?ai)?|runpod)(?:[_\-\s]?(?<n>\d+))?$', 'IgnoreCase')
+    if (-not $m.Success) {
+        throw "-Pod '$Selector' invalide. Formats acceptés : Vast, Vast_2, RunPod, RunPod_3..."
+    }
+    $index = if ($m.Groups['n'].Success) { [int]$m.Groups['n'].Value } else { 1 }
+    if ($index -lt 1) { throw "-Pod '$Selector' : la numérotation commence à 1." }
+
+    return [pscustomobject]@{
+        Platform = $(if ($m.Groups['plat'].Value -match '^runpod$') { "RunPod" } else { "Vast" })
+        Index    = $index
+    }
+}
+
 function Resolve-Pod {
     if ($PodHost -and $PodPort) {
         return [pscustomobject]@{ PodId = "manual"; PodIP = $PodHost; PodPort = $PodPort }
     }
+    if ($Provider -eq "Manual") { throw "Fournisseur Manual : -PodHost et -PodPort sont obligatoires." }
 
-    switch ($Provider) {
-        "Vast" {
-            if (-not (Test-Path -LiteralPath $Config.GetVastPodScript)) {
-                throw "Script de détection du pod introuvable : $($Config.GetVastPodScript)"
-            }
-            # -SkipFfmpegCheck : ce script-ci refait de toute façon son propre contrôle, plus complet
-            # (Test-PodPreflight, plus bas), qui teste aussi le contournement LD_PRELOAD multi-GPU.
-            # Évite une connexion SSH en double et accélère le démarrage.
-            return (& $Config.GetVastPodScript -SkipFfmpegCheck)
-        }
-        "RunPod" {
-            # À compléter : appel à l'API RunPod. En attendant, IP/port fournis par variables d'environnement.
-            if (-not $env:RUNPOD_SSH_HOST -or -not $env:RUNPOD_SSH_PORT) {
-                throw "Fournisseur RunPod : définissez RUNPOD_SSH_HOST et RUNPOD_SSH_PORT (détection par API non implémentée)."
-            }
-            return [pscustomobject]@{ PodId = "runpod"; PodIP = $env:RUNPOD_SSH_HOST; PodPort = $env:RUNPOD_SSH_PORT }
-        }
-        "Manual" {
-            throw "Fournisseur Manual : -PodHost et -PodPort sont obligatoires."
-        }
-    }
+    $getScript = $Config.GetPodScripts[$script:PodPlatform]
+    if (-not (Test-Path -LiteralPath $getScript)) { throw "Script de détection du pod introuvable : $getScript" }
+
+    # Mode Simple : IP et port seulement, pas d'audit (Test-PodPreflight fait la vérification utile)
+    $podArgs = @{ Mode = "Simple"; Index = $script:PodIndex }
+    return (@(& $getScript @podArgs) | Where-Object { $_ -and $_.PSObject.Properties['PodIP'] } | Select-Object -First 1)
 }
 
 function Initialize-SshContext {
     # Options communes, toujours AVANT l'hôte : après, elles seraient prises pour la commande distante
     $script:SshOptions = @(
         "-T",
-        "-p", [string]$script:Pod.PodPort,
+        "-p", [string]$script:PodInfo.PodPort,
         "-i", $Config.KeyPath,
         "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=/dev/null",
         "-o", "BatchMode=yes",        # échoue au lieu de demander un mot de passe
         "-o", "ConnectTimeout=15"
     )
-    $script:SshTarget = "$SSHUser@$($script:Pod.PodIP)"
+    $script:SshTarget = "$SSHUser@$($script:PodInfo.PodIP)"
 }
 
 # Commande courte (pré-vérifications). NE PAS utiliser pour le flux : celui-ci a besoin de stdin.
@@ -211,36 +265,43 @@ function Invoke-PodSsh {
 # 2) + 3) MOTEUR DE STREAMING (commun à tous les modes)
 # ============================================================================
 
+# Latence mesurée par ouverture de connexion TCP sur le port SSH du pod (Vast et RunPod bloquent
+# souvent le ping ICMP : l'ancien Test-Connection attendait alors ~16 s pour rien à chaque fichier).
+function Measure-PodLatency {
+    param ([string]$TargetHost, [string]$Port, [int]$Samples = 3, [int]$TimeoutMs = 1000)
+
+    $times = foreach ($i in 1..$Samples) {
+        $client = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            if ($client.ConnectAsync($TargetHost, [int]$Port).Wait($TimeoutMs)) { $sw.Elapsed.TotalMilliseconds }
+        } catch { } finally { $client.Dispose() }
+    }
+    if (-not $times) { return $null }
+    return ($times | Measure-Object -Minimum).Minimum
+}
+
 function Get-StreamBufferSize {
-    param ([string]$TargetHost)
+    param ([string]$TargetHost, [string]$Port)
 
     $default = 524288   # 512 Ko
-    if ([string]::IsNullOrWhiteSpace($TargetHost)) { return $default }
+    if ([string]::IsNullOrWhiteSpace($TargetHost) -or [string]::IsNullOrWhiteSpace($Port)) { return $default }
 
-    try {
-        $replies = @(Test-Connection -TargetName $TargetHost -Count 3 -ErrorAction SilentlyContinue |
-                     Where-Object { $_.Status -eq 'Success' })
-        if ($replies.Count -eq 0) {
-            Write-Log "ICMP sans réponse : buffer par défaut à 512 Ko." -Color Gray
-            return $default
-        }
-
-        $avgRtt = ($replies | Measure-Object -Property Latency -Average).Average   # PowerShell 7 : Latency
-        if ($avgRtt -gt 100) {
-            Write-Log "Latence élevée ($([Math]::Round($avgRtt)) ms) : buffer à 2 Mo." -Color Yellow
-            return 2097152
-        }
-        elseif ($avgRtt -gt 40) {
-            Write-Log "Latence moyenne ($([Math]::Round($avgRtt)) ms) : buffer à 1 Mo." -Color Gray
-            return 1048576
-        }
-        Write-Log "Latence faible ($([Math]::Round($avgRtt)) ms) : buffer à 512 Ko." -Color Gray
-        return 524288
-    }
-    catch {
-        Write-Log "Mesure de latence impossible : buffer par défaut à 512 Ko." -Color Gray
+    $rtt = Measure-PodLatency -TargetHost $TargetHost -Port $Port
+    if ($null -eq $rtt) {
+        Write-Log "Latence TCP non mesurable : buffer par défaut à 512 Ko." -Color Gray
         return $default
     }
+    if ($rtt -gt 100) {
+        Write-Log "Latence TCP élevée ($([Math]::Round($rtt)) ms) : buffer à 2 Mo." -Color Yellow
+        return 2097152
+    }
+    elseif ($rtt -gt 40) {
+        Write-Log "Latence TCP moyenne ($([Math]::Round($rtt)) ms) : buffer à 1 Mo." -Color Gray
+        return 1048576
+    }
+    Write-Log "Latence TCP faible ($([Math]::Round($rtt)) ms) : buffer à 512 Ko." -Color Gray
+    return $default
 }
 
 function Invoke-StreamEngine {
@@ -251,7 +312,8 @@ function Invoke-StreamEngine {
     $utf8     = [System.Text.Encoding]::UTF8
 
     # --- Récepteur : ssh.exe qui exécute la commande distante du plan ---
-    $sshArgs = @("-q", "-o", "Compression=no", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3") +
+    $sshArgs = @("-q", "-o", "Compression=no", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
+                 "-c", "aes128-gcm@openssh.com,chacha20-poly1305@openssh.com") +
                $script:SshOptions + @($script:SshTarget, $Plan.RemoteCommand)
 
     Write-Log "Source locale  : $($Plan.SourceFile) $($Plan.SourceArgs -join ' ')" -Color Gray
@@ -294,7 +356,7 @@ function Invoke-StreamEngine {
         }
     } -MessageData $remoteLog
 
-    $bufferSize = Get-StreamBufferSize -TargetHost $script:Pod.PodIP
+    $bufferSize = Get-StreamBufferSize -TargetHost $script:PodInfo.PodIP -Port $script:PodInfo.PodPort
 
     # --- Source locale (stderr lu en continu : jamais laissé se remplir) ---
     $srcPsi = [Diagnostics.ProcessStartInfo]@{
@@ -325,6 +387,8 @@ function Invoke-StreamEngine {
     $totalReceived = 0L
     $sendFailed    = $false
     $completed     = $false
+    $lastLogBytes  = 0L                               # pour le débit instantané (depuis le dernier affichage)
+    $lastLogTime   = 0.0
 
     try {
         # Réception en tâche de fond : vide en continu le stdout de ssh (évite tout inter-blocage)
@@ -337,10 +401,19 @@ function Invoke-StreamEngine {
                 $totalSent += $bytesRead
 
                 if ($totalSent -ge $nextLog) {
-                    $pct    = if ($expected -gt 0) { " ({0} %)" -f [Math]::Min(100, [Math]::Round(100 * $totalSent / $expected)) } else { "" }
-                    $speed  = ($totalSent / 1MB) / [Math]::Max(1, $sw.Elapsed.TotalSeconds)
-                    $recvMB = [Math]::Round(([System.IO.FileInfo]::new($Plan.RawOutputPath)).Length / 1MB, 1)
-                    Write-Log ("Envoi : {0} Mo{1} | reçu : {2} Mo | {3:N1} Mo/s" -f [Math]::Round($totalSent / 1MB), $pct, $recvMB, $speed) -Color Gray
+                    $now     = $sw.Elapsed.TotalSeconds
+                    $pct     = if ($expected -gt 0) { " ({0} %)" -f [Math]::Min(100, [Math]::Round(100 * $totalSent / $expected)) } else { "" }
+                    # Débit instantané : octets envoyés depuis le dernier affichage / temps écoulé depuis
+                    $instant = (($totalSent - $lastLogBytes) / 1MB) / [Math]::Max(0.1, $now - $lastLogTime)
+                    $average = ($totalSent / 1MB) / [Math]::Max(0.1, $now)
+                    $recvMB  = [Math]::Round(([System.IO.FileInfo]::new($Plan.RawOutputPath)).Length / 1MB, 1)
+                    $eta     = ""
+                    if ($expected -gt $totalSent -and $instant -gt 0) {
+                        $eta = " | reste ~" + [TimeSpan]::FromSeconds([Math]::Round((($expected - $totalSent) / 1MB) / $instant)).ToString()
+                    }
+                    Write-Log ("Envoi : {0} Mo{1} | reçu : {2} Mo | {3:N1} Mo/s (moy. {4:N1}){5}" -f [Math]::Round($totalSent / 1MB), $pct, $recvMB, $instant, $average, $eta) -Color Gray
+                    $lastLogBytes = $totalSent
+                    $lastLogTime  = $now
                     $nextLog += $logStep
                 }
             }
@@ -456,11 +529,21 @@ function New-TranscribePlan {
 }
 
 function Get-EncodeRemoteCommand {
-    # $script:NvencFixNeeded n'est connu qu'après Test-PodPreflight ; tant qu'il n'a pas tourné
-    # (plan construit avant le contact du pod, ou -SkipPreflight), on part sans LD_PRELOAD.
-    $prefix = if ($script:NvencFixNeeded) { "LD_PRELOAD=$($Config.NvencFixRemote) " } else { "" }
-    return "${prefix}ffmpeg -nostdin -hide_banner -loglevel error -probesize 32M -analyzeduration 0 -y -i pipe:0 " +
-           "-map 0:v:0 -map 0:a? -c:v av1_nvenc -preset $Preset -tune hq -cq $CQ -b:v 0 -pix_fmt p010le -c:a copy " +
+    # $script:NvencPreload n'est connu qu'après l'audit / Test-PodPreflight ; tant qu'ils n'ont pas
+    # tourné (plan construit avant le contact du pod, ou -SkipPreflight), on part sans LD_PRELOAD.
+    $prefix = if ($script:NvencPreload) { "LD_PRELOAD=$($script:NvencPreload) " } else { "" }
+
+    # GPU : décodage NVDEC, images gardées en mémoire GPU, conversion 10 bits par scale_cuda.
+    # CPU : décodage logiciel, conversion 10 bits par -pix_fmt, puis envoi des images brutes au GPU.
+    if ($script:GpuDecode) {
+        $decode  = "-hwaccel cuda -hwaccel_output_format cuda "
+        $convert = "-vf scale_cuda=format=p010le"
+    } else {
+        $decode  = ""
+        $convert = "-pix_fmt p010le"
+    }
+    return "${prefix}ffmpeg -nostdin -hide_banner -loglevel error -probesize 32M -analyzeduration 0 -y ${decode}-i pipe:0 " +
+           "-map 0:v:0 -map 0:a? -c:v av1_nvenc -preset $Preset -tune hq -cq $CQ -b:v 0 $convert -c:a copy " +
            "-f matroska -live 1 -flush_packets 1 pipe:1"
 }
 
@@ -509,7 +592,7 @@ function Test-PodPreflight {
     # Un seul appel SSH : connexion + contrôle propre au mode
     switch ($ResolvedMode) {
         "EncodeAV1" {
-            $check = "echo POD_OK"
+            $check = "echo POD_OK; command -v ffmpeg >/dev/null 2>&1 && echo FF_OK || echo FF_MISSING"
         }
         default {
             $check = "echo POD_OK; test -x $($Config.RemoteProjectDir)/$($Config.RemotePython) && echo PY_OK || echo PY_MISSING"
@@ -524,23 +607,34 @@ function Test-PodPreflight {
 
     switch ($ResolvedMode) {
         "EncodeAV1" {
-            # D'abord SANS contournement : la plupart des pods (hôte mono-GPU, ou déjà à jour)
-            # n'en ont pas besoin. On n'installe/compile le contournement que si ce test échoue
-            # réellement - évite de réclamer nvenc_fix.c pour rien.
-            if (Test-NvencEncoder -Preload:$false) {
-                $script:NvencFixNeeded = $false
-                Write-Log "NVENC opérationnel nativement (pas de contournement nécessaire sur ce pod)." -Tag POD -Color Green
+            if ($r.Output -match "FF_MISSING") {
+                throw "ffmpeg absent du pod : lance d'abord le déploiement (linux_deploy_python.ps1), dont l'audit l'installe."
             }
-            else {
-                Write-Log "av1_nvenc échoue nativement, tentative avec le contournement LD_PRELOAD..." -Tag POD -Color Yellow
-                $libCheck = Invoke-PodSsh -Command "test -f $($Config.NvencFixRemote) && echo LIB_OK || echo LIB_MISSING"
-                if ($libCheck.Output -match "LIB_MISSING") { Install-NvencFix }
-                if (-not (Test-NvencEncoder -Preload:$true)) {
-                    throw "L'encodeur NVENC ne fonctionne pas sur ce pod, même avec le contournement (changer d'hôte ?)."
-                }
-                $script:NvencFixNeeded = $true
-                Write-Log "NVENC opérationnel (avec contournement LD_PRELOAD)." -Tag POD -Color Green
+            if (Test-NvencEncoder) {
+                $script:NvencPreload = ""
+                Write-Log "NVENC opérationnel nativement." -Tag POD -Color Green
+                Resolve-DecodePath -Preflight
+                return
             }
+
+            # Échec natif : cause la plus fréquente = libcuda « compat » de l'image chargée à la place
+            # de celle du driver de l'hôte. On force celle de l'hôte (même version que le driver).
+            Write-Log "av1_nvenc échoue nativement, essai avec la libcuda de l'hôte forcée..." -Tag POD -Color Yellow
+            $find = Invoke-PodSsh -Command ('d=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | tr -d " "); ' +
+                'for f in /usr/lib/x86_64-linux-gnu/libcuda.so.$d /lib/x86_64-linux-gnu/libcuda.so.$d /usr/lib64/libcuda.so.$d; do ' +
+                '[ -n "$d" ] && [ -f "$f" ] && { echo "HOSTLIB=$f"; break; }; done')
+            $m = [regex]::Match($find.Output, 'HOSTLIB=(\S+)')
+            if (-not $m.Success) {
+                throw "L'encodeur AV1 NVENC ne fonctionne pas sur ce pod et la libcuda de l'hôte est introuvable. " +
+                      "Lance l'audit (get_*_pod_info.ps1 -Mode Audit) pour le diagnostic, ou change de pod."
+            }
+            if (-not (Test-NvencEncoder -Preload $m.Groups[1].Value)) {
+                throw "L'encodeur AV1 NVENC ne fonctionne pas sur ce pod, même avec la libcuda de l'hôte " +
+                      "(nvidia-uvm défectueux ?). Lance l'audit (get_*_pod_info.ps1 -Mode Audit) ou change de pod."
+            }
+            $script:NvencPreload = $m.Groups[1].Value
+            Write-Log "NVENC opérationnel avec LD_PRELOAD=$($script:NvencPreload) (redéploie avec -FixCompat pour corriger le pod)." -Tag POD -Color Yellow
+            Resolve-DecodePath -Preflight
         }
         default {
             if ($r.Output -match "PY_MISSING") {
@@ -551,30 +645,110 @@ function Test-PodPreflight {
     }
 }
 
-function Install-NvencFix {
-    Write-Log "Installation du contournement NVENC (compilation sur le pod)..." -Tag POD
-
-    if (-not (Test-Path -LiteralPath $Config.NvencFixSource)) {
-        throw "Ce pod a besoin du contournement NVENC, mais sa source est introuvable en local : $($Config.NvencFixSource). " +
-              "Change de pod (hôte mono-GPU de préférence) ou fournis nvenc_fix.c."
-    }
-
-    $port   = [string]$script:Pod.PodPort
-    $remote = "$SSHUser@$($script:Pod.PodIP):/tmp/nvenc_fix.c"
-    & $Config.SCPExe -P $port -i $Config.KeyPath -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes $Config.NvencFixSource $remote 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Envoi de nvenc_fix.c vers le pod impossible (scp)." }
-
-    $build = Invoke-PodSsh -Command "gcc -shared -fPIC -O2 -o $($Config.NvencFixRemote) /tmp/nvenc_fix.c -ldl"
-    if ($build.ExitCode -ne 0) { throw "Compilation du contournement impossible :`n$($build.Output)" }
-}
-
 function Test-NvencEncoder {
-    param ([bool]$Preload = $true)
+    param ([string]$Preload = "")
 
-    $prefix = if ($Preload) { "LD_PRELOAD=$($Config.NvencFixRemote) " } else { "" }
-    Write-Log "Test de l'encodeur NVENC$(if ($Preload) { ' (avec contournement)' } else { ' (sans contournement)' })..." -Tag POD
+    $prefix = if ($Preload) { "LD_PRELOAD=$Preload " } else { "" }
+    Write-Log "Test de l'encodeur NVENC$(if ($Preload) { " (libcuda de l'hôte forcée)" } else { ' (natif)' })..." -Tag POD
     $test = Invoke-PodSsh -Command "${prefix}ffmpeg -nostdin -hide_banner -loglevel error -f lavfi -i testsrc2=size=1280x720:rate=24 -t 1 -c:v av1_nvenc -preset $Preset -pix_fmt p010le -f null -"
     return ($test.ExitCode -eq 0)
+}
+
+# ----------------------------------------------------------------------------
+# DÉCODAGE GPU (NVDEC) OU CPU
+# ----------------------------------------------------------------------------
+
+# Codec et format de pixels de la 1re piste vidéo de la source (ffprobe local, instantané)
+function Get-SourceVideoInfo {
+    param ([string]$Path)
+    $raw  = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,pix_fmt,width,height -of "default=noprint_wrappers=1" $Path 2>$null
+    $info = @{}
+    foreach ($line in $raw) { if ("$line" -match '^(\w+)=(.*)$') { $info[$Matches[1]] = $Matches[2].Trim() } }
+    return [pscustomobject]@{
+        Codec  = $info['codec_name']
+        PixFmt = $info['pix_fmt']
+        Size   = $(if ($info['width']) { "$($info['width'])x$($info['height'])" } else { "?" })
+    }
+}
+
+# Combinaisons que NVDEC décode sur les GPU compatibles AV1 NVENC (Ada et plus récents).
+# Hors liste (H.264 10 bits, 4:2:2, 4:4:4, codecs anciens...) : ffmpeg repasserait en décodage
+# logiciel, incompatible avec scale_cuda -> on choisit directement le CPU.
+function Test-NvdecCompatible {
+    param ($Video)
+    if (-not $Video -or -not $Video.Codec) { return $false }
+    $supported = @{
+        h264       = @("yuv420p", "yuvj420p")
+        hevc       = @("yuv420p", "yuvj420p", "yuv420p10le")
+        av1        = @("yuv420p", "yuv420p10le")
+        vp9        = @("yuv420p", "yuv420p10le")
+        mpeg2video = @("yuv420p")
+        vc1        = @("yuv420p")
+    }
+    return ($supported.ContainsKey($Video.Codec) -and $Video.PixFmt -in $supported[$Video.Codec])
+}
+
+# Teste sur le pod la chaîne complète NVDEC -> scale_cuda -> NVENC, sur un court extrait
+# encodé au même codec que la source (vérifie aussi que ce ffmpeg a bien le filtre scale_cuda).
+function Test-GpuDecodePipeline {
+    $prefix = if ($script:NvencPreload) { "LD_PRELOAD=$($script:NvencPreload) " } else { "" }
+    $v      = $script:SourceVideo
+    $sample = switch ($v.Codec) {
+        "h264"  { "-c:v h264_nvenc -pix_fmt yuv420p" }
+        "av1"   { if ($v.PixFmt -like "*10le") { "-c:v av1_nvenc -pix_fmt p010le" } else { "-c:v av1_nvenc -pix_fmt yuv420p" } }
+        default { if ($v.PixFmt -like "*10le") { "-c:v hevc_nvenc -profile:v main10 -pix_fmt p010le" } else { "-c:v hevc_nvenc -pix_fmt yuv420p" } }
+    }
+    Write-Log "Test du décodage GPU (NVDEC -> scale_cuda -> NVENC)..." -Tag POD
+    $cmd = "${prefix}ffmpeg -nostdin -hide_banner -loglevel error -f lavfi -i testsrc2=size=1280x720:rate=24 -t 1 $sample -f matroska - | " +
+           "${prefix}ffmpeg -nostdin -hide_banner -loglevel error -hwaccel cuda -hwaccel_output_format cuda -i pipe:0 " +
+           "-vf scale_cuda=format=p010le -c:v av1_nvenc -preset $Preset -f null -"
+    $test = Invoke-PodSsh -Command "set -o pipefail; $cmd"
+    return [pscustomobject]@{ Ok = ($test.ExitCode -eq 0); Output = $test.Output }
+}
+
+# Fixe $script:GpuDecode selon -Decode, le codec de la source et (si -Preflight) le test sur le pod
+function Resolve-DecodePath {
+    param ([switch]$Preflight)
+
+    $v     = $script:SourceVideo
+    $label = if ($v) { "$($v.Codec) $($v.PixFmt) $($v.Size)" } else { "inconnue" }
+
+    switch ($Decode) {
+        "Cpu" {
+            $script:GpuDecode = $false
+            Write-Log "Décodage : CPU (forcé par -Decode Cpu)." -Tag POD -Color Gray
+            return
+        }
+        "Gpu" {
+            if (-not $Preflight) {
+                $script:GpuDecode = $true
+                Write-Log "Décodage : GPU (forcé par -Decode Gpu, non testé)." -Tag POD -Color Yellow
+                return
+            }
+        }
+        default {
+            if (-not $Preflight) {
+                $script:GpuDecode = $false
+                Write-Log "Décodage : CPU (-SkipPreflight : GPU non testé ; -Decode Gpu pour le forcer)." -Tag POD -Color Gray
+                return
+            }
+            if (-not (Test-NvdecCompatible $v)) {
+                $script:GpuDecode = $false
+                Write-Log "Décodage : CPU (source $label non décodable par NVDEC)." -Tag POD -Color Yellow
+                return
+            }
+        }
+    }
+
+    $t = Test-GpuDecodePipeline
+    if ($t.Ok) {
+        $script:GpuDecode = $true
+        Write-Log "Décodage : GPU (NVDEC), source $label : toute la chaîne reste sur la carte graphique." -Tag POD -Color Green
+    } else {
+        $script:GpuDecode = $false
+        $why = (($t.Output -split "`r?`n") | Where-Object { $_ } | Select-Object -First 2) -join " | "
+        Write-Log "Décodage : CPU (le test du décodage GPU a échoué sur ce pod : $why)." -Tag POD -Color Yellow
+    }
 }
 
 # ============================================================================
@@ -713,6 +887,16 @@ try {
         if ($logDir -and -not (Test-Path -LiteralPath $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
     }
 
+    # --- Saut si la sortie existe déjà (avant tout travail, sans contacter le pod) ---
+    $OutputFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputFile)
+    if (Test-Path -LiteralPath $OutputFile -PathType Leaf) {
+        if (-not $Force) {
+            Write-Log "Sortie déjà présente, traitement sauté : $OutputFile (-Force pour refaire)." -Tag SKIP -Color DarkYellow
+            exit 0
+        }
+        Write-Log "Sortie déjà présente, elle sera remplacée (-Force) : $OutputFile" -Tag PRE -Color Yellow
+    }
+
     # --- Validation ---
     if (-not (Test-Path -LiteralPath $LocalPath)) { throw "Fichier source introuvable : $LocalPath" }
     foreach ($tool in @("ffmpeg", "ffprobe")) {
@@ -722,7 +906,14 @@ try {
 
     # Chemins absolus : les API .NET utilisent le dossier du processus, pas l'emplacement PowerShell courant
     $LocalPath  = (Resolve-Path -LiteralPath $LocalPath).ProviderPath
-    $OutputFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputFile)
+
+    # --- Pod ciblé : -Pod "Vast_2" (l'ancien -Provider reste accepté) ---
+    if ($Provider -and $Provider -ne "Manual" -and -not $PSBoundParameters.ContainsKey('Pod')) { $Pod = $Provider }
+    if (-not ($PodHost -and $PodPort) -and $Provider -ne "Manual") {
+        $sel = Resolve-PodSelector -Selector $Pod
+        $script:PodPlatform = $sel.Platform
+        $script:PodIndex    = $sel.Index
+    }
 
     # --- Mode ---
     $ResolvedMode = $Mode
@@ -739,6 +930,10 @@ try {
     Write-Log "Mode          : $ResolvedMode" -Tag PRE -Color DarkCyan
     Write-Log "Fichier source: $LocalPath" -Tag PRE
     Write-Log "Fichier cible : $OutputFile" -Tag PRE
+    if ($ResolvedMode -eq "EncodeAV1") {
+        $script:SourceVideo = Get-SourceVideoInfo -Path $LocalPath
+        Write-Log "Vidéo source  : $($script:SourceVideo.Codec) $($script:SourceVideo.PixFmt) $($script:SourceVideo.Size)" -Tag PRE
+    }
 
     $outDir = [IO.Path]::GetDirectoryName($OutputFile)
     if ($outDir -and -not (Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
@@ -747,22 +942,24 @@ try {
     $plan = New-StreamPlan -ResolvedMode $ResolvedMode
 
     # --- Pod ---
-    Write-Log "Recherche du pod ($Provider)..." -Tag POD -Color Yellow
-    $script:Pod = Resolve-Pod
-    if (-not $script:Pod -or -not $script:Pod.PodIP -or -not $script:Pod.PodPort) {
+    $podLabel = if ($PodHost -and $PodPort) { "manuel" } else { "$($script:PodPlatform)_$($script:PodIndex)" }
+    Write-Log "Recherche du pod ($podLabel)..." -Tag POD -Color Yellow
+    $script:PodInfo = Resolve-Pod
+    if (-not $script:PodInfo -or -not $script:PodInfo.PodIP -or -not $script:PodInfo.PodPort) {
         throw "Impossible de récupérer l'IP ou le port du pod."
     }
-    Write-Log "Pod ciblé : $($script:Pod.PodIP):$($script:Pod.PodPort)" -Tag POD -Color Green
+    Write-Log "Pod ciblé : $podLabel (ID $($script:PodInfo.PodId)) -> $($script:PodInfo.PodIP):$($script:PodInfo.PodPort)" -Tag POD -Color Green
     Initialize-SshContext
 
     if ($SkipPreflight) {
         Write-Log "Pré-vérification du pod ignorée (-SkipPreflight)." -Tag POD -Color Yellow
+        if ($ResolvedMode -eq "EncodeAV1") { Resolve-DecodePath }
     } else {
         Test-PodPreflight -ResolvedMode $ResolvedMode
-        # $plan a été construit avant de savoir si le contournement NVENC est nécessaire (étape 1
-        # avant l'étape POD) ; on met à jour sa commande distante avec ce qu'a déterminé le preflight.
-        if ($ResolvedMode -eq "EncodeAV1") { $plan.RemoteCommand = Get-EncodeRemoteCommand }
     }
+    # $plan a été construit avant de connaître LD_PRELOAD et le mode de décodage (étape 1 avant
+    # l'étape POD) ; on met à jour sa commande distante avec ce qui a été déterminé.
+    if ($ResolvedMode -eq "EncodeAV1") { $plan.RemoteCommand = Get-EncodeRemoteCommand }
 
     # --- Étapes 2 et 3 : flux et journaux ---
     Write-Log "Lancement du streaming..." -Color Yellow

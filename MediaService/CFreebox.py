@@ -28,12 +28,12 @@ import json
 import ssl
 import sys
 import time
-from pathlib import Path
 from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
 
+from Common.Helpers.File import PROJECT_ROOT
 from Common.Helpers.System import CURRENT_MACHINE
 
 APP_ID = "fr.sedoud.freebox-client"
@@ -41,7 +41,7 @@ APP_NAME = "Freebox client Python"
 APP_VERSION = "1.0"
 LOCAL_URL = "http://mafreebox.freebox.fr"
 # Dossier des fichiers de configuration (ici py1\Files, à adapter si besoin)
-FILES_DIR = Path(__file__).resolve().parents[1] / "Files"
+FILES_DIR = PROJECT_ROOT / "Files"
 TOKEN_FILE = FILES_DIR / "freebox_token.json"
 # Autorités racines Freebox (le certificat HTTPS de la box n'est pas signé par une CA publique)
 CA_FILE = FILES_DIR / "freebox_ca.pem"

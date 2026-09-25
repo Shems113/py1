@@ -66,14 +66,14 @@ def extract_mono_16khz_pcm_stream(
 def get_audio_id3_tags(file_path: str | Path) -> Any:
     """Extrait les étiquettes ID3/EasyID3 d'un fichier audio."""
     path_str = str(file_path)
-    mime = mimetypes.guess_type(path_str)[0]
+    mime = str(mimetypes.guess_type(path_str)[0])
     audio_cls = MIME_TYPE_TO_AUDIO.get(mime)
     return audio_cls(path_str, ID3=EasyID3) if audio_cls else None
 
 def get_audio_tags(file_path: str | Path) -> Any:
     """Extrait les étiquettes de métadonnées vidéo/audio de base."""
     path_str = str(file_path)
-    mime = mimetypes.guess_type(path_str)[0]
+    mime = str(mimetypes.guess_type(path_str)[0])
     video_cls = MIME_TYPE_TO_VIDEO.get(mime)
     return video_cls(path_str) if video_cls else None
 
