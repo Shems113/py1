@@ -35,8 +35,9 @@ def _hw_device() -> str | None:
         HWAccel(device_type=device).create(av.Codec("h264", "r"))
     except (OSError, av.FFmpegError):
         return None
-    print("...............Device is {device}")
-    return device
+    print(f"...............Device is {device}")
+    # return device
+    return None
 
 
 def _open_container(source: str | BinaryIO) -> Any:
