@@ -116,7 +116,7 @@ class CMedia:
                 str(p) for pattern in self.file_patterns
                 for p in self.source_path.rglob(pattern) if p.is_file()
             }
-            return list(matched_files)
+            return [Path(matched_file).resolve() for matched_file in matched_files]
 
         return self.logger.logElapsedTime(fetch_files, "Get source files")
 

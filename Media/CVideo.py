@@ -57,7 +57,7 @@ class CVideo(CMedia):
                 target=sys.stdout,
                 separator=self.data_separator
             )
-            self.logger.log("Writting csv to output stream successful")
+            self.logger.log("Writing csv to output stream successful")
         else:
             ensure_ffmpeg_available()
             data = self.process_files_parallel(self._get_video_attributes_fields)
