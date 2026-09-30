@@ -14,8 +14,10 @@
     Pratique pour relancer un lot interrompu : seuls les fichiers manquants sont traités.
 
     CHOIX DU POD : -Pod "<Plateforme>[_<N>]"
-        Vast (défaut) = Vast_1, Vast_2, RunPod = RunPod_1, RunPod_3...
-        N°1 = pod démarré le plus récemment ; la liste numérotée est affichée à chaque lancement.
+        Vast (défaut) = Vast_-1 = le pod Vast.ai le plus ancien ; RunPod = RunPod_-1.
+        N° positif = depuis le plus récent (Vast_1, Vast_2...), négatif = depuis le plus ancien (Vast_-2...).
+        Le plus ancien par défaut : un lot en cours reste sur son pod même si un autre pod est créé.
+        La liste numérotée est affichée à chaque lancement.
         -PodHost / -PodPort court-circuitent la recherche (usage en lot).
 
     VÉRIFICATION DU POD (Test-PodPreflight), avant d'envoyer la moindre donnée. Volontairement
@@ -38,9 +40,9 @@
     Scripts requis dans le même dossier : get_vast_pod_info.ps1, get_run_pod_info.ps1.
 
     Modes :
-      Transcribe   : audio PCM 16 kHz -> Main.py (Transcribe) -> CSV, puis SRT
-      EncodeAV1    : vidéo (Matroska) -> ffmpeg NVENC AV1     -> MKV, puis MP4 (faststart)
-      CheckFrames  : vidéo (Matroska) -> Main.py (ReadAndCheck) -> rapport CSV
+      Transcribe   : audio PCM 16 kHz -> Main.py (Transcribe)-> CSV, puis SRT
+      EncodeAV1    : vidéo (Matroska)-> ffmpeg NVENC AV1     -> MKV, puis MP4 (faststart)
+      CheckFrames  : vidéo (Matroska)-> Main.py (ReadAndCheck)-> rapport CSV
     Sans -Mode : .mp4/.mkv en sortie = EncodeAV1, sinon Transcribe (comportement de l'ancien script).
 
     AJOUTER UN MODE :
@@ -51,7 +53,7 @@
     renvoyé que les deux existants) et une entrée dans $Config.GetPodScripts.
 
 .EXAMPLE
-    .\linux_streaming.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1_AV1.mp4"                 # 1er pod Vast.ai
+    .\linux_streaming.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1_AV1.mp4"                 # pod Vast.ai le plus ancien
 .EXAMPLE
     .\linux_streaming.ps1 "E:\Series\ep1.mp4" "D:\Out\ep1_AV1.mp4" -Pod RunPod_2
 .EXAMPLE
@@ -76,7 +78,7 @@ param (
     [ValidateSet("Auto", "Transcribe", "EncodeAV1", "CheckFrames")]
     [string]$Mode = "Auto",
 
-    # Plateforme et n° du pod : "Vast", "Vast_2", "RunPod", "RunPod_3"... (n°1 = le plus récent)
+    # Plateforme et n° du pod : "Vast" (= Vast_-1, le plus ancien), "Vast_1" (le plus récent), "RunPod_-2"...
     [string]$Pod = "Vast",
 
     # Contournent la détection (utile en lot : détecter une fois, réutiliser)
@@ -155,7 +157,7 @@ $script:NvencPreload = ""
 $script:GpuDecode    = $false
 $script:SourceVideo  = $null
 $script:PodPlatform  = ""
-$script:PodIndex     = 1
+$script:PodIndex     = -1
 
 # ============================================================================
 # JOURNAUX
@@ -203,16 +205,18 @@ function New-PythonCommand {
 # POD : DÉTECTION PAR FOURNISSEUR, SSH, COPIE
 # ============================================================================
 
-# "Vast", "Vast_2", "RunPod", "RunPod_3" (casse indifférente ; "VastAi", "Vast.ai-2" acceptés)
+# "Vast" (= Vast_-1), "Vast_2", "Vast_-2", "RunPod", "RunPod_3" (casse indifférente ; "VastAi", "Vast.ai-2" acceptés)
+# N° positif : depuis le plus récent (1 = le plus récent) ; négatif : depuis le plus ancien (-1 = le plus ancien).
 function Resolve-PodSelector {
     param ([string]$Selector)
 
-    $m = [regex]::Match($Selector.Trim(), '^(?<plat>vast(?:[\.\s]?ai)?|runpod)(?:[_\-\s]?(?<n>\d+))?$', 'IgnoreCase')
+    $m = [regex]::Match($Selector.Trim(), '^(?<plat>vast(?:[\.\s]?ai)?|runpod)(?:[_\-\s]?(?<n>-?\d+))?$', 'IgnoreCase')
     if (-not $m.Success) {
-        throw "-Pod '$Selector' invalide. Formats acceptés : Vast, Vast_2, RunPod, RunPod_3..."
+        throw "-Pod '$Selector' invalide. Formats acceptés : Vast, Vast_2, Vast_-1, RunPod, RunPod_3..."
     }
-    $index = if ($m.Groups['n'].Success) { [int]$m.Groups['n'].Value } else { 1 }
-    if ($index -lt 1) { throw "-Pod '$Selector' : la numérotation commence à 1." }
+    # Sans n° : le plus ancien (-1), pour qu'un lot en cours ne change pas de pod quand un autre est créé
+    $index = if ($m.Groups['n'].Success) { [int]$m.Groups['n'].Value } else { -1 }
+    if ($index -eq 0) { throw "-Pod '$Selector' : n° 0 invalide (1 = le plus récent, -1 = le plus ancien)." }
 
     return [pscustomobject]@{
         Platform = $(if ($m.Groups['plat'].Value -match '^runpod$') { "RunPod" } else { "Vast" })
@@ -570,7 +574,9 @@ function New-CheckFramesPlan {
 
     $sourceArgs = @("-nostdin", "-loglevel", "error", "-i", $LocalPath, "-map", "0:v:0")
     if ($IncludeAudio) { $sourceArgs += @("-map", "0:a?") }
-    $sourceArgs += @("-c", "copy", "-f", "matroska", "pipe:1")
+    # Métadonnées et chapitres retirés : inutiles au contrôle des images, et certains vieux fichiers
+    # les ont en Latin-1, que PyAV refuse d'ouvrir (UnicodeDecodeError sur « é »).
+    $sourceArgs += @("-map_metadata", "-1", "-map_chapters", "-1", "-c", "copy", "-f", "matroska", "pipe:1")
 
     return [pscustomobject]@{
         Mode          = "CheckFrames"
@@ -948,7 +954,7 @@ try {
     if (-not $script:PodInfo -or -not $script:PodInfo.PodIP -or -not $script:PodInfo.PodPort) {
         throw "Impossible de récupérer l'IP ou le port du pod."
     }
-    Write-Log "Pod ciblé : $podLabel (ID $($script:PodInfo.PodId)) -> $($script:PodInfo.PodIP):$($script:PodInfo.PodPort)" -Tag POD -Color Green
+    Write-Log "Pod ciblé : $podLabel (ID $($script:PodInfo.PodId))-> $($script:PodInfo.PodIP):$($script:PodInfo.PodPort)" -Tag POD -Color Green
     Initialize-SshContext
 
     if ($SkipPreflight) {

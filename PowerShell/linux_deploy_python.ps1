@@ -5,13 +5,15 @@
 
 .DESCRIPTION
     Le pod est désigné par -Pod "<Plateforme>[_<N>]" :
-        Vast       -> 1er pod actif Vast.ai (valeur par défaut)
-        Vast_2     -> 2e pod actif Vast.ai
-        RunPod     -> 1er pod actif RunPod
-        RunPod_3   -> 3e pod actif RunPod
-    La numérotation commence à 1 et suit l'ordre de démarrage : n°1 = pod démarré le plus
-    récemment (c'est aussi le pod retenu par défaut par linux_streaming.ps1). La liste
-    numérotée est affichée à chaque lancement, le pod choisi y est marqué par ►.
+        Vast       -> pod Vast.ai le plus ancien (= Vast_-1, valeur par défaut)
+        Vast_1     -> pod Vast.ai le plus récent
+        Vast_-2    -> 2e plus ancien
+        RunPod     -> pod RunPod le plus ancien (= RunPod_-1)
+        RunPod_3   -> 3e plus récent
+    Numérotation par ordre de création : n° positif depuis le plus récent, négatif depuis le
+    plus ancien. Le plus ancien par défaut (comme linux_streaming.ps1) : un pod créé ensuite ne
+    détourne pas un traitement en cours. La liste numérotée est affichée à chaque lancement,
+    le pod choisi y est marqué par ►.
     Casse indifférente ; "VastAi", "Vast.ai" et "Vast-2" sont acceptés.
 
     Étapes :
@@ -41,8 +43,9 @@
     git@github.com:...) ou un credential helper évite ce risque.
 
 .EXAMPLE
-    .\linux_deploy_python.ps1 -RepoUrl $url                        # 1er pod Vast.ai
-    .\linux_deploy_python.ps1 -RepoUrl $url -Pod RunPod            # 1er pod RunPod
+    .\linux_deploy_python.ps1 -RepoUrl $url                        # pod Vast.ai le plus ancien
+    .\linux_deploy_python.ps1 -RepoUrl $url -Pod Vast_1            # pod Vast.ai le plus récent
+    .\linux_deploy_python.ps1 -RepoUrl $url -Pod RunPod            # pod RunPod le plus ancien
     .\linux_deploy_python.ps1 -RepoUrl $url -Pod Vast_2 -FixCompat
     .\linux_deploy_python.ps1 -RepoUrl $url -Pod RunPod_1 -RequireAv1 -SkipBenchmark
 #>
@@ -51,7 +54,7 @@ param (
     [Parameter(Mandatory = $true)]
     [string]$RepoUrl, # Ex: "https://<TOKEN>@github.com/utilisateur/repo.git"
 
-    # Plateforme et n° du pod : "Vast", "Vast_2", "RunPod", "RunPod_3"...
+    # Plateforme et n° du pod : "Vast" (= Vast_-1, le plus ancien), "Vast_1" (le plus récent), "RunPod_-2"...
     [Parameter(Mandatory = $false)]
     [string]$Pod = "Vast",
 
@@ -92,20 +95,22 @@ if ($SkipFfmpegCheck) { $SkipAudit = $true }
 
 Write-Host "`n=== DEPLOIEMENT ET EXECUTIONS DISTANTES ===" -ForegroundColor Cyan
 
-# --- SÉLECTEUR DE POD : "Vast", "Vast_2", "RunPod", "RunPod_3" ---
-$m = [regex]::Match($Pod.Trim(), '^(?<plat>vast(?:[\.\s]?ai)?|runpod)(?:[_\-\s]?(?<n>\d+))?$', 'IgnoreCase')
+# --- SÉLECTEUR DE POD : "Vast" (= Vast_-1), "Vast_2", "Vast_-2", "RunPod", "RunPod_3" ---
+$m = [regex]::Match($Pod.Trim(), '^(?<plat>vast(?:[\.\s]?ai)?|runpod)(?:[_\-\s]?(?<n>-?\d+))?$', 'IgnoreCase')
 if (-not $m.Success) {
-    Write-Host "[ERREUR] -Pod '$Pod' invalide. Formats acceptés : Vast, Vast_2, RunPod, RunPod_3..." -ForegroundColor Red
+    Write-Host "[ERREUR] -Pod '$Pod' invalide. Formats acceptés : Vast, Vast_2, Vast_-1, RunPod, RunPod_3..." -ForegroundColor Red
     exit 1
 }
 $Platform = if ($m.Groups['plat'].Value -match '^runpod$') { "RunPod" } else { "Vast" }
-$PodIndex = if ($m.Groups['n'].Success) { [int]$m.Groups['n'].Value } else { 1 }
-if ($PodIndex -lt 1) {
-    Write-Host "[ERREUR] -Pod '$Pod' : la numérotation commence à 1 (${Platform}_1 = ${Platform})." -ForegroundColor Red
+# Sans n° : le plus ancien (-1), stable même si un autre pod est créé ensuite
+$PodIndex = if ($m.Groups['n'].Success) { [int]$m.Groups['n'].Value } else { -1 }
+if ($PodIndex -eq 0) {
+    Write-Host "[ERREUR] -Pod '$Pod' : n° 0 invalide (${Platform}_1 = le plus récent, ${Platform}_-1 = le plus ancien)." -ForegroundColor Red
     exit 1
 }
 $PlatformLabel = if ($Platform -eq "RunPod") { "RunPod" } else { "Vast.ai" }
-Write-Host "[INFO] Pod ciblé : ${Platform}_${PodIndex} ($PlatformLabel, n°$PodIndex de la liste)" -ForegroundColor Cyan
+$PodRank = if ($PodIndex -eq -1) { "le plus ancien" } elseif ($PodIndex -eq 1) { "le plus récent" } elseif ($PodIndex -lt 0) { "n°$PodIndex, depuis le plus ancien" } else { "n°$PodIndex, depuis le plus récent" }
+Write-Host "[INFO] Pod ciblé : ${Platform}_${PodIndex} ($PlatformLabel, $PodRank)" -ForegroundColor Cyan
 
 # --- CONFIGURATION SSH ---
 $KeyPath = "$env:USERPROFILE\.ssh\id_ed25519"
@@ -163,7 +168,7 @@ if (-not $PodInfo -or -not $PodInfo.PodIP -or -not $PodInfo.PodPort) {
 
 $PodIP   = $PodInfo.PodIP
 $PodPort = $PodInfo.PodPort
-Write-Host "[OK] Pod ${Platform}_${PodIndex} (ID: $($PodInfo.PodId)) -> IP: $PodIP | Port: $PodPort" -ForegroundColor Green
+Write-Host "[OK] Pod ${Platform}_${PodIndex} (ID: $($PodInfo.PodId))-> IP: $PodIP | Port: $PodPort" -ForegroundColor Green
 
 # --- Exploitation du verdict d'audit ---
 if (-not $SkipAudit) {

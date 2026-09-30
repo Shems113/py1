@@ -34,6 +34,7 @@
     .\get_vast_pod_info.ps1
     .\get_vast_pod_info.ps1 -Mode Audit
     .\get_vast_pod_info.ps1 -Mode Audit -Index 2     # 2e pod de la liste (n°1 = le plus récent)
+    .\get_vast_pod_info.ps1 -Index -2                # 2e plus ancien (-1 = le plus ancien = défaut)
     .\get_vast_pod_info.ps1 -Mode Audit -FixCompat
     .\get_vast_pod_info.ps1 -Mode Audit -All -SkipBenchmark
 #>
@@ -46,10 +47,11 @@ param (
     # [string]$VastApiKey = $env:VAST_API_KEY,
 	[string]$VastApiKey = "e6703638ee5f4817205f17fa934a1fa2e85e107ada7de344401d89ddbac76e81",
     [string]$InstanceId = "",
-    # N° du pod dans la liste des pods actifs (1 = le plus récent). 0 = comportement par défaut.
-    [ValidateRange(0, 999)]
+    # N° du pod dans la liste des pods actifs : 1 = le plus récent, -1 = le plus ancien.
+    # 0 = défaut = -1 : le plus ancien, stable même si d'autres pods sont créés ensuite.
+    [ValidateRange(-999, 999)]
     [int]$Index = 0,
-    # Audit : tous les pods actifs au lieu du plus récent
+    # Audit : tous les pods actifs au lieu du plus ancien
     [switch]$All,
 
     [string]$SSHUser = "root",
@@ -140,17 +142,30 @@ function Resolve-VastAddress {
     return $null
 }
 
-# Liste numérotée : n°1 = pod démarré le plus récemment (même pod que le choix par défaut)
-$Ordered = @($Running | Sort-Object { [double]$_['start_date'] } -Descending)
+# Liste numérotée par ordre de création : n°1 = le plus récent, n°-1 = le plus ancien.
+# L'ID Vast.ai croît à chaque création : l'ordre reste stable même si un pod est arrêté puis
+# relancé (start_date, lui, change à chaque redémarrage).
+$Ordered = @($Running | Sort-Object { [long]$_['id'] } -Descending)
 
-if ($Index -gt 0 -or $Ordered.Count -gt 1) {
-    Write-Host "      Pods actifs (n°1 = le plus récent) :" -ForegroundColor Cyan
+# Pod retenu : -InstanceId, sinon -Index (0 = défaut = -1 : le plus ancien), sinon tous (-Mode Audit -All).
+# Le plus ancien par défaut : un lot en cours reste sur son pod même si un autre pod est créé ensuite.
+$Pick        = if ($Index -ne 0) { $Index } elseif ($All -and $Mode -eq 'Audit') { 0 } else { -1 }
+$SelectedPos = if ($Pick -gt 0) { $Pick - 1 } elseif ($Pick -lt 0) { $Ordered.Count + $Pick } else { -1 }
+if (-not $InstanceId -and $Pick -ne 0 -and ($SelectedPos -lt 0 -or $SelectedPos -ge $Ordered.Count)) {
+    Write-Host "[ERREUR] Vast_${Pick} demandé, mais seulement $($Ordered.Count) pod(s) actif(s)." -ForegroundColor Red
+    exit 1
+}
+
+if ($Index -ne 0 -or $Ordered.Count -gt 1) {
+    Write-Host "      Pods actifs (n°1 = le plus récent, n°-1 = le plus ancien) :" -ForegroundColor Cyan
     for ($i = 0; $i -lt $Ordered.Count; $i++) {
-        $p    = $Ordered[$i]
-        $addr = Resolve-VastAddress $p
-        $ssh  = if ($addr) { "$($addr.PodIP):$($addr.PodPort) ($($addr.Mode))" } else { "SSH indisponible" }
-        $mark = if ($Index -eq $i + 1) { "►" } else { " " }
-        Write-Host ("      {0} Vast_{1,-3} {2,-10} {3,-26} {4}" -f $mark, ($i + 1), $p['id'], "$($p['gpu_name']) x$($p['num_gpus'])", $ssh) -ForegroundColor Gray
+        $p        = $Ordered[$i]
+        $addr     = Resolve-VastAddress $p
+        $addr     = if ($addr) { "$($addr.PodIP):$($addr.PodPort) ($($addr.Mode))" } else { "SSH indisponible" }
+        $selected = if ($InstanceId) { [string]$p['id'] -eq $InstanceId } else { $i -eq $SelectedPos }
+        $mark     = if ($selected) { "►" } else { " " }
+        $label    = "Vast_{0} / Vast_{1}" -f ($i + 1), ($i - $Ordered.Count)
+        Write-Host ("      {0} {1,-22} {2,-16} {3,-26} {4}" -f $mark, $label, $p['id'], "$($p['gpu_name']) x$($p['num_gpus'])", $addr) -ForegroundColor Gray
     }
 }
 
@@ -160,12 +175,8 @@ if ($InstanceId) {
         Write-Host "[ERREUR] Le pod ${InstanceId} n'existe pas ou n'est pas en cours d'exécution." -ForegroundColor Red
         exit 1
     }
-} elseif ($Index -gt 0) {
-    if ($Index -gt $Ordered.Count) {
-        Write-Host "[ERREUR] Vast_${Index} demandé, mais seulement $($Ordered.Count) pod(s) actif(s)." -ForegroundColor Red
-        exit 1
-    }
-    $Candidates = @($Ordered[$Index - 1])
+} elseif ($Pick -ne 0) {
+    $Candidates = @($Ordered[$SelectedPos])
 } else {
     $Candidates = $Ordered
 }
@@ -177,13 +188,12 @@ foreach ($p in $Candidates) {
     else { Write-Host "[AVERTISSEMENT] Pod $($p['id']) ignoré : IP ou port SSH introuvable (pod encore en démarrage ?)." -ForegroundColor Yellow }
 }
 if ($Usable.Count -eq 0) {
-    if ($Index -gt 0) { Write-Host "[ERREUR] Vast_${Index} n'est pas joignable en SSH (voir la raison ci-dessus) : choisis un autre n°." -ForegroundColor Red; exit 1 }
+    if ($Pick -ne 0 -and -not $InstanceId) { Write-Host "[ERREUR] Vast_${Pick} (ID $($Ordered[$SelectedPos]['id'])) n'est pas joignable en SSH (voir la raison ci-dessus) : choisis un autre n° avec -Index." -ForegroundColor Red; exit 1 }
     Write-Host "[ERREUR] Aucun pod actif n'a une adresse SSH exploitable." -ForegroundColor Red
     exit 1
 }
-if ($Usable.Count -gt 1 -and -not $InstanceId -and $Index -eq 0 -and -not $All) {
-    $ids = ($Usable | ForEach-Object { $_.Pod['id'] }) -join ", "
-    Write-Host "[INFO] Plusieurs pods actifs ($ids) : le plus récent est retenu. -InstanceId pour en choisir un$(if ($Mode -eq 'Audit') { ', -All pour tous les auditer' })." -ForegroundColor Cyan
+if ($Ordered.Count -gt 1 -and -not $InstanceId -and $Index -eq 0 -and $Pick -ne 0) {
+    Write-Host "[INFO] Plusieurs pods actifs : le plus ancien (Vast_-1) est retenu par défaut. -Index 1 pour le plus récent, -InstanceId pour un pod précis$(if ($Mode -eq 'Audit') { ', -All pour tous les auditer' })." -ForegroundColor Cyan
 }
 
 $Targets = if ($Mode -eq 'Audit' -and $All) { @($Usable) } else { @($Usable[0]) }
@@ -192,7 +202,7 @@ $Targets = if ($Mode -eq 'Audit' -and $All) { @($Usable) } else { @($Usable[0]) 
 if ($Mode -eq 'Simple') {
     $t = $Targets[0]
     Write-Host "[3/3] Extraction réussie !" -ForegroundColor Yellow
-    Write-Host "[OK] Pod détecté (ID: $($t.Pod['id']), connexion $($t.Address.Mode)) -> IP: $($t.Address.PodIP) | Port: $($t.Address.PodPort)" -ForegroundColor Green
+    Write-Host "[OK] Pod détecté (ID: $($t.Pod['id']), connexion $($t.Address.Mode))-> IP: $($t.Address.PodIP) | Port: $($t.Address.PodPort)" -ForegroundColor Green
     return [pscustomobject]@{
         Provider = "Vast.ai"
         PodId    = [string]$t.Pod['id']

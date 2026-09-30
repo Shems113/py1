@@ -33,6 +33,7 @@
     .\get_run_pod_info.ps1
     .\get_run_pod_info.ps1 -Mode Audit
     .\get_run_pod_info.ps1 -Mode Audit -Index 2      # 2e pod de la liste (n°1 = le plus récent)
+    .\get_run_pod_info.ps1 -Index -2                 # 2e plus ancien (-1 = le plus ancien = défaut)
     .\get_run_pod_info.ps1 -Mode Audit -FixCompat
     .\get_run_pod_info.ps1 -Mode Audit -All -SkipBenchmark
 #>
@@ -45,10 +46,11 @@ param (
     # [string]$RunPodApiKey = $env:RUNPOD_API_KEY,
 	[string]$RunPodApiKey = "rpa_RGWYOV61Y09S04MI01YPI0XUNXG1KOLU24F9GZHQ1afrf5",
     [string]$PodId = "",
-    # N° du pod dans la liste des pods actifs (1 = le plus récent). 0 = comportement par défaut.
-    [ValidateRange(0, 999)]
+    # N° du pod dans la liste des pods actifs : 1 = le plus récent, -1 = le plus ancien.
+    # 0 = défaut = -1 : le plus ancien, stable même si d'autres pods sont créés ensuite.
+    [ValidateRange(-999, 999)]
     [int]$Index = 0,
-    # Audit : tous les pods actifs au lieu du plus récent
+    # Audit : tous les pods actifs au lieu du plus ancien
     [switch]$All,
 
     [string]$SSHUser = "root",
@@ -149,18 +151,30 @@ function Get-RunPodGpuLabel {
     return "?"
 }
 
-# Liste numérotée : n°1 = pod démarré le plus récemment (même pod que le choix par défaut)
-$Ordered = @($Running | Sort-Object { ConvertTo-RunPodDate $_.lastStartedAt } -Descending)
+# Liste numérotée par ordre de création : n°1 = le plus récent, n°-1 = le plus ancien.
+# Date de création (createdAt) si l'API la fournit, sinon date du dernier démarrage :
+# dans ce second cas, redémarrer un pod le fait passer en tête de liste.
+$Ordered = @($Running | Sort-Object { ConvertTo-RunPodDate $(if ($_.createdAt) { $_.createdAt } else { $_.lastStartedAt }) } -Descending)
 
-if ($Index -gt 0 -or $Ordered.Count -gt 1) {
-    Write-Host "      Pods actifs (n°1 = le plus récent) :" -ForegroundColor Cyan
+# Pod retenu : -PodId, sinon -Index (0 = défaut = -1 : le plus ancien), sinon tous (-Mode Audit -All).
+# Le plus ancien par défaut : un lot en cours reste sur son pod même si un autre pod est créé ensuite.
+$Pick        = if ($Index -ne 0) { $Index } elseif ($All -and $Mode -eq 'Audit') { 0 } else { -1 }
+$SelectedPos = if ($Pick -gt 0) { $Pick - 1 } elseif ($Pick -lt 0) { $Ordered.Count + $Pick } else { -1 }
+if (-not $PodId -and $Pick -ne 0 -and ($SelectedPos -lt 0 -or $SelectedPos -ge $Ordered.Count)) {
+    Write-Host "[ERREUR] RunPod_${Pick} demandé, mais seulement $($Ordered.Count) pod(s) actif(s)." -ForegroundColor Red
+    exit 1
+}
+
+if ($Index -ne 0 -or $Ordered.Count -gt 1) {
+    Write-Host "      Pods actifs (n°1 = le plus récent, n°-1 = le plus ancien) :" -ForegroundColor Cyan
     for ($i = 0; $i -lt $Ordered.Count; $i++) {
-        $p    = $Ordered[$i]
-        $addr = Resolve-RunPodAddress $p
-        $ssh  = if ($addr) { "$($addr.PodIP):$($addr.PodPort)" } else { "pas de SSH direct" }
-        $mark = if ($Index -eq $i + 1) { "►" } else { " " }
-        $gpu  = Get-RunPodGpuLabel $p
-        Write-Host ("      {0} RunPod_{1,-3} {2,-16} {3,-26} {4}" -f $mark, ($i + 1), $p.id, $gpu, $ssh) -ForegroundColor Gray
+        $p        = $Ordered[$i]
+        $addr     = Resolve-RunPodAddress $p
+        $addr     = if ($addr) { "$($addr.PodIP):$($addr.PodPort)" } else { "pas de SSH direct" }
+        $selected = if ($PodId) { $p.id -eq $PodId } else { $i -eq $SelectedPos }
+        $mark     = if ($selected) { "►" } else { " " }
+        $label    = "RunPod_{0} / RunPod_{1}" -f ($i + 1), ($i - $Ordered.Count)
+        Write-Host ("      {0} {1,-22} {2,-16} {3,-26} {4}" -f $mark, $label, $p.id, (Get-RunPodGpuLabel $p), $addr) -ForegroundColor Gray
     }
 }
 
@@ -170,12 +184,8 @@ if ($PodId) {
         Write-Host "[ERREUR] Le pod ${PodId} n'existe pas ou n'est pas en cours d'exécution." -ForegroundColor Red
         exit 1
     }
-} elseif ($Index -gt 0) {
-    if ($Index -gt $Ordered.Count) {
-        Write-Host "[ERREUR] RunPod_${Index} demandé, mais seulement $($Ordered.Count) pod(s) actif(s)." -ForegroundColor Red
-        exit 1
-    }
-    $Candidates = @($Ordered[$Index - 1])
+} elseif ($Pick -ne 0) {
+    $Candidates = @($Ordered[$SelectedPos])
 } else {
     $Candidates = $Ordered
 }
@@ -187,13 +197,12 @@ foreach ($p in $Candidates) {
     else { Write-Host "[AVERTISSEMENT] Pod $($p.id) ($($p.name)) ignoré : $(Get-RunPodReason $p)." -ForegroundColor Yellow }
 }
 if ($Usable.Count -eq 0) {
-    if ($Index -gt 0) { Write-Host "[ERREUR] RunPod_${Index} n'est pas joignable en SSH (voir la raison ci-dessus) : choisis un autre n°." -ForegroundColor Red; exit 1 }
+    if ($Pick -ne 0 -and -not $PodId) { Write-Host "[ERREUR] RunPod_${Pick} (ID $($Ordered[$SelectedPos].id)) n'est pas joignable en SSH (voir la raison ci-dessus) : choisis un autre n° avec -Index." -ForegroundColor Red; exit 1 }
     Write-Host "[ERREUR] Aucun pod actif n'a d'accès SSH direct exploitable." -ForegroundColor Red
     exit 1
 }
-if ($Usable.Count -gt 1 -and -not $PodId -and $Index -eq 0 -and -not $All) {
-    $ids = ($Usable | ForEach-Object { $_.Pod.id }) -join ", "
-    Write-Host "[INFO] Plusieurs pods actifs ($ids) : le plus récent est retenu. -PodId pour en choisir un$(if ($Mode -eq 'Audit') { ', -All pour tous les auditer' })." -ForegroundColor Cyan
+if ($Ordered.Count -gt 1 -and -not $PodId -and $Index -eq 0 -and $Pick -ne 0) {
+    Write-Host "[INFO] Plusieurs pods actifs : le plus ancien (RunPod_-1) est retenu par défaut. -Index 1 pour le plus récent, -PodId pour un pod précis$(if ($Mode -eq 'Audit') { ', -All pour tous les auditer' })." -ForegroundColor Cyan
 }
 
 $Targets = if ($Mode -eq 'Audit' -and $All) { @($Usable) } else { @($Usable[0]) }
@@ -202,7 +211,7 @@ $Targets = if ($Mode -eq 'Audit' -and $All) { @($Usable) } else { @($Usable[0]) 
 if ($Mode -eq 'Simple') {
     $t = $Targets[0]
     Write-Host "[3/3] Extraction réussie !" -ForegroundColor Yellow
-    Write-Host "[OK] Pod détecté (ID: $($t.Pod.id), connexion $($t.Address.Mode)) -> IP: $($t.Address.PodIP) | Port: $($t.Address.PodPort)" -ForegroundColor Green
+    Write-Host "[OK] Pod détecté (ID: $($t.Pod.id), connexion $($t.Address.Mode))-> IP: $($t.Address.PodIP) | Port: $($t.Address.PodPort)" -ForegroundColor Green
     return [pscustomobject]@{
         Provider = "RunPod"
         PodId    = [string]$t.Pod.id
