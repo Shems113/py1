@@ -15,7 +15,7 @@ from Media.CMedia import CMedia
 
 win32 = __import__("win32com.client").client if IS_WINDOWS else None
 
-def win32_required(func: Callable) -> Callable:
+def win32_required(func: Callable)-> Callable:
     """Décorateur pour restreindre l'exécution des méthodes Word à Windows."""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
@@ -31,7 +31,7 @@ class CWord(CMedia):
         self,
         json_path: str | Path,
         action_type: EActionType
-        ) -> None:
+        )-> None:
         super().__init__(json_path, EMediaType.Word, action_type)
         self.word = None
         if IS_WINDOWS and win32:
@@ -43,28 +43,28 @@ class CWord(CMedia):
         self.df, self.value_by_bookmark = self.get_data()
         self.shuffle_df: bool = False
 
-    def get_data(self) -> tuple[pd.DataFrame, dict[str, Any]]:
+    def get_data(self)-> tuple[pd.DataFrame, dict[str, Any]]:
         if self.action_type == EActionType.Write and self.other_source_path:
             df = data_frame_from_csv(str(self.other_source_path), self.data_separator)
             return _compute_carrefour_bill_values(df[df["isSelected"] == 1].drop(columns=["isSelected"]))
         return pd.DataFrame(), {}
 
-    def close(self) -> None:
+    def close(self)-> None:
         if IS_WINDOWS and self.word:
             self.logger.logElapsedTime(self.word.Quit, "Quit Word application")
 
     @win32_required
-    def read(self) -> None:
+    def read(self)-> None:
         self._word_action("Read bookmarks of ", [self._read_document_bookmarks])
 
     @win32_required
-    def bookmark(self) -> None:
+    def bookmark(self)-> None:
         self._word_action(
             "Bookmark ", [self._delete_document_bookmarks, self._add_document_bookmarks], file_format=16
         )
 
     @win32_required
-    def write(self) -> None:
+    def write(self)-> None:
         actions = [self._read_document_bookmarks, self._write_document_bookmarks, self._delete_document_bookmarks]
         self._word_action("Write bookmarks of ", actions, file_format=17)
 
@@ -73,7 +73,7 @@ class CWord(CMedia):
         label_prefix: str,
         document_actions: list[Callable[[Any], list[str] | str]],
         file_format: int | None = None
-    ) -> None:
+    )-> None:
         for file_path in self.get_source_files():
             self.logger.logElapsedTime(
                 lambda p=file_path: self._execute_on_document(p, document_actions, file_format),
@@ -85,7 +85,7 @@ class CWord(CMedia):
         word_path: str,
         actions: list[Callable[[Any], Any]],
         file_format: int | None
-    ) -> list[Any]:
+    )-> list[Any]:
         doc = self.word.Documents.Open(word_path)
         try:
             results = [action(doc) for action in actions]
@@ -96,15 +96,15 @@ class CWord(CMedia):
         finally:
             doc.Close()
 
-    def _read_document_bookmarks(self, doc: Any) -> list[str]:
+    def _read_document_bookmarks(self, doc: Any)-> list[str]:
         return [b.Name for b in doc.Bookmarks]
 
-    def _delete_document_bookmarks(self, doc: Any) -> str:
+    def _delete_document_bookmarks(self, doc: Any)-> str:
         for b in list(doc.Bookmarks):
             b.Delete()
         return "DeleteBookmarks"
 
-    def _add_document_bookmarks(self, doc: Any) -> str:
+    def _add_document_bookmarks(self, doc: Any)-> str:
         for r in self.df.itertuples(index=False):
             is_table = getattr(r, "type", None) == "table"
             target_range = doc.Tables[int(r.value)].Range if is_table else self._find_range(doc, str(r.value))
@@ -119,11 +119,11 @@ class CWord(CMedia):
         self,
         doc: Any,
         text: str
-        ) -> Any | None:
+        )-> Any | None:
         rng = doc.Range()
         return rng if rng.Find.Execute(Text=text) else None
 
-    def _write_document_bookmarks(self, doc: Any) -> str:
+    def _write_document_bookmarks(self, doc: Any)-> str:
         for name, val in self.value_by_bookmark.items():
             if doc.Bookmarks.Exists(name):
                 doc.Bookmarks(name).Range.Text = str(val)
@@ -144,7 +144,7 @@ class CWord(CMedia):
 
 def _compute_carrefour_bill_values(
     df: pd.DataFrame,
-) -> tuple[pd.DataFrame, dict[str, Any]]:
+)-> tuple[pd.DataFrame, dict[str, Any]]:
     """Calcule le résumé de facturation Carrefour."""
     df_calc = df.assign(priceWithTva=df["price"] * df["tva"] / 100)
     bill_date = datetime.now().astimezone() + timedelta(days=-1, hours=-5)

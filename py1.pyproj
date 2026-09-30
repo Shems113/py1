@@ -21,6 +21,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Common\CLazy.py" />
+    <Compile Include="Common\CMusicAutotag.py" />
     <Compile Include="Common\CWhisperModel.py" />
     <Compile Include="Common\Helpers\Audio.py" />
     <Compile Include="Common\Helpers\Dataframe.py" />

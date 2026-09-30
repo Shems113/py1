@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 
 from Common.CLogger import CLogger as Logger
-from Common.Helpers.Dataframe import data_frame_to_csv
+from Common.Helpers.Dataframe import data_frame_column_hashable, data_frame_to_csv
 from Common.Helpers.File import PROJECT_ROOT, remove_empty_folders
 from Common.Helpers.Json import json_from_file
 from Common.Helpers.System import CPU_COUNT
@@ -21,7 +21,7 @@ class CMedia:
         json_path: str | Path,
         media_type: Any,
         action_type: Any
-    ) -> None:
+        )-> None:
         self.json_path = json_path
         self.media_type = media_type
         self.action_type = action_type
@@ -61,7 +61,7 @@ class CMedia:
     def _resolve_path(
         self,
         raw_path: str | Path | None
-        ) -> Path:
+        )-> Path:
         """Résout un chemin de manière générique : absolu s'il l'est, sinon relatif à la racine du projet."""
         if not raw_path:
             return PROJECT_ROOT
@@ -75,7 +75,7 @@ class CMedia:
     def _load_item(
         self,
         json_path: Path
-        ) -> dict[str, Any]:
+        )-> dict[str, Any]:
         """Extrait l'élément de configuration correspondant au MediaType et à l'Action."""
         media_name = self.media_type.name
         action_name = self.action_type.name
@@ -106,9 +106,9 @@ class CMedia:
 
         return target_item
 
-    def get_source_files(self) -> list[str]:
+    def get_source_files(self)-> list[str]:
         """Recherche les fichiers sources correspondant aux motifs définis de manière optimisée."""
-        def fetch_files() -> list[str]:
+        def fetch_files()-> list[str]:
             if not self.source_path.exists():
                 return []
 
@@ -116,11 +116,11 @@ class CMedia:
                 str(p) for pattern in self.file_patterns
                 for p in self.source_path.rglob(pattern) if p.is_file()
             }
-            return [Path(matched_file).resolve() for matched_file in matched_files]
+            return [str(Path(matched_file).resolve()) for matched_file in matched_files]
 
         return self.logger.logElapsedTime(fetch_files, "Get source files")
 
-    def init_log(self) -> None:
+    def init_log(self)-> None:
         """Initialise le fichier de log avec les métadonnées de l'opération."""
         logs = (
             f"Media : {self.media_type.name}",
@@ -134,14 +134,14 @@ class CMedia:
         for entry in logs:
             self.logger.log(entry)
 
-    def remove_empty_folders(self) -> None:
+    def remove_empty_folders(self)-> None:
         """Suppression récursive des dossiers vides dans le répertoire source."""
         remove_empty_folders(self.source_path)
 
     def process_files_parallel(
         self,
         extract_func: Callable[[str], dict[str, list[dict[str, Any]]]]
-    ) -> dict[str, list[dict[str, Any]]]:
+    )-> dict[str, list[dict[str, Any]]]:
         """Exécute l'extraction d'attributs de fichiers en parallèle et accumule les résultats."""
         data: dict[str, list[dict[str, Any]]] = defaultdict(list)
         files = self.get_source_files()
@@ -170,25 +170,68 @@ class CMedia:
     def build_dataframes_by_codec(
         self,
         data: dict[str, list[dict[str, Any]]],
-        log_message: str=""
-    ) -> dict[str, pd.DataFrame]:
+        log_message: str="",
+        skip_aggregation : bool = False
+    )-> dict[str, pd.DataFrame]:
         """Extrait les attributs des fichiers et construit le DataFrame de données."""
 
-        def build_normalized() -> dict[str, pd.DataFrame]:
-            return (
-                {codec_type: (value if isinstance(value, pd.DataFrame) else pd.json_normalize(value))
-                for codec_type, value in data.items()}
-                )
-
-        return self.logger.logElapsedTime(
-            build_normalized, f"Build dataframe with {log_message}{self.media_type.name} files info"
+        raw_results: dict[str, pd.DataFrame] = self.logger.logElapsedTime(
+            lambda:self._build_normalized_dataframes_by_codec(data), 
+            f"Build dataframe with {log_message}{self.media_type.name} files info"
         )
+
+        agg_results: dict[str, pd.DataFrame] = self.logger.logElapsedTime(
+            lambda:self._build_aggregated_dataframes_by_codec(raw_results), 
+            f"Build aggregated dataframe with {log_message}{self.media_type.name} files info"
+        ) if not skip_aggregation else {}
+
+        return raw_results | {f"{codec_type}Agg": df for codec_type, df in agg_results.items()}
+
+    def _build_normalized_dataframes_by_codec(
+        self,
+        data: dict[str, pd.DataFrame]
+        )-> dict[str, pd.DataFrame]:
+        return (
+            {codec_type: (value if isinstance(value, pd.DataFrame) else pd.json_normalize(value))
+             for codec_type, value in data.items()}
+            )
+
+    def _build_aggregated_dataframes_by_codec(
+        self,
+        data: dict[str, pd.DataFrame]
+        )-> dict[str, pd.DataFrame]:
+        aggregated = {}
+        for codec, df in data.items():
+            if df.empty:
+                aggregated[codec] = pd.DataFrame()
+                continue
+
+            agg_dfs = []
+            for col in df.columns:
+                if col == "path":
+                    continue
+                counts = (
+                    data_frame_column_hashable(df[col]).value_counts()
+                    .to_frame("count")
+                    .reset_index()
+                    .assign(key=col)
+                    .rename(columns={col: "value"})[["key", "value", "count"]]
+                )
+                
+                agg_dfs.append(counts)
+
+            aggregated[codec] = (
+                pd.concat(agg_dfs, ignore_index=True)
+                if agg_dfs
+                else pd.DataFrame()
+            )
+        return aggregated
 
     def export_dataframes_to_csv_by_codec(
         self,
         dicoOfDataframes: dict[str, pd.DataFrame],
         isOtherSource: bool=False
-    ) -> None:
+    )-> None:
         """Méthode factorisée pour exporter un dictionnaire de DataFrames en CSV."""
         if not self.target_path:
             self.logger.log(
@@ -201,7 +244,7 @@ class CMedia:
         for codec_type, df in dicoOfDataframes.items():
             csv_file_path = target_dir / f"{codec_type}Result.csv"
 
-            def export_csv() -> None:
+            def export_csv()-> None:
                 data_frame_to_csv(
                     df, csv_file_path, self.data_separator, self.fieldsByCodec.get(codec_type)  # noqa: B023
                 )

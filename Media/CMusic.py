@@ -4,12 +4,16 @@ from pathlib import Path
 
 import pandas as pd
 
+from Common.CMusicAutotag import CMusicAutotag
 from Common.EEnums import EActionType, EMediaType
 from Common.Helpers.Audio import (
     add_audio_id3_images,
     get_audio_id3_tags,
 )
-from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
+from Common.Helpers.Dataframe import (
+    data_frame_from_csv,
+    data_frame_to_csv,
+)
 from Common.Helpers.File import (
     clean_file_name,
     clean_last_directory_name,
@@ -25,13 +29,14 @@ from Media.CMedia import CMedia
 
 class CMusic(CMedia):
     def __init__(
-        self,
+        self,   
         json_path: str | Path,
         action_type: EActionType
-    ) -> None:
+        )-> None:
+        self.music_auto_tag = CMusicAutotag("aw7C9JmtuM",contact="mohamed.sedoud@gmail.com")
         super().__init__(json_path, EMediaType.Music, action_type)
 
-    def read(self) -> None:
+    def read(self)-> None:
         """Lit les fichiers audio sources et exporte les analyses en CSV."""
         if not self.other_source_path:
             self.logger.log(
@@ -40,55 +45,14 @@ class CMusic(CMedia):
             return
 
         data = self.process_files_parallel(self._get_music_attributes_fields)
-        dfs = self._build_dataframes(data)
+        dfs = self.build_dataframes_by_codec(data)
         self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
         self.remove_empty_folders()
-
-    def _build_dataframes(
-        self,
-        data: dict[str, list[dict[str, typing.Any]]]
-        ) -> dict[str, pd.DataFrame]:
-        # Normalisation Pandas & construction des DataFrames (raw et agrégé)
-        raw_results: dict[str, pd.DataFrame] = self.build_dataframes_by_codec(data)
-        agg_results: dict[str, pd.DataFrame] = self.build_dataframes_by_codec(self._build_aggregated(raw_results), log_message="Aggregated ")
-        return raw_results | {f"{codec_type}Agg": df for codec_type, df in agg_results.items()}
-
-    def _build_aggregated(
-        self,
-        data: dict[str, pd.DataFrame]
-        ) -> dict[str, pd.DataFrame]:
-        aggregated = {}
-        for codec, df in data.items():
-            if df.empty:
-                aggregated[codec] = pd.DataFrame()
-                continue
-
-            agg_dfs = []
-            for col in df.columns:
-                if col == "path":
-                    continue
-
-                counts = (
-                    df.value_counts(col)
-                    .to_frame("count")
-                    .reset_index()
-                    .assign(key=col)
-                    .rename(columns={col: "value"})[["key", "value", "count"]]
-                )
-                agg_dfs.append(counts)
-
-            aggregated[codec] = (
-                pd.concat(agg_dfs, ignore_index=True)
-                if agg_dfs
-                else pd.DataFrame()
-            )
-        return aggregated
-
 
     def _get_music_attributes_fields(
         self,
         file_path: str | Path
-    ) -> dict[str, list[dict[str, typing.Any]]]:
+    )-> dict[str, list[dict[str, typing.Any]]]:
         """Extrait les tags et déplace/copie le fichier si configuré."""
         path_obj = Path(file_path)
         self.logger.log(f"Get music attributes fields of {path_obj}")
@@ -127,12 +91,12 @@ class CMusic(CMedia):
                     / clean_last_directory_name(album.upper())
                 )
 
-                def file_name_func(idx: int, suffix: str) -> str:
+                def file_name_func(idx: int, suffix: str)-> str:
                     prefix = f"{idx}{suffix}" if idx != 0 else ""
                     title = clean_file_name(audio.get("title", [""])[0])
                     return str(target_dir / f"{prefix}{title}{extension}")
 
-                def is_same_media_func(other_file: str | Path) -> bool:
+                def is_same_media_func(other_file: str | Path)-> bool:
                     other_path = Path(other_file)
                     if not other_path.is_file():
                         return False
@@ -159,12 +123,17 @@ class CMusic(CMedia):
 
             common_fields = get_file_common_fields(target_file_path, False)
 
+            music_auto_tags = self.logger.logElapsedTime(
+                    lambda : self.music_auto_tag.get_tags(target_file_path),
+                    f"Get auto tags of {target_file_path}",
+                )
             # Formatage des données de tags
             music_tags = {k: "|".join(map(str, v)) for k, v in audio.items()}
             other_info = vars(audio.info) if hasattr(audio, "info") else {}
 
             return {
                 "music": [common_fields | music_tags],
+                "musicAutoTag": [music_auto_tags],
                 "musicOther": [common_fields | other_info],
             }
 
@@ -174,12 +143,12 @@ class CMusic(CMedia):
             )
             return {}
 
-    def write(self) -> None:
+    def write(self)-> None:
         """Met à jour les tags texte et images des fichiers audio."""
         self._write_audio_fields()
         self._write_audio_images()
 
-    def _write_audio_fields(self) -> None:
+    def _write_audio_fields(self)-> None:
         """Édite les métadonnées texte ID3 à partir de la source CSV."""
         if not self.source_path:
             return
@@ -200,7 +169,7 @@ class CMusic(CMedia):
                 if pd.notna(getattr(row, col))
             }
 
-            def edit_task() -> bool:
+            def edit_task()-> bool:
                 return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
 
             log_msg = f"Edit {file_path} with fields {media_fields}"
@@ -216,7 +185,7 @@ class CMusic(CMedia):
         self,
         file_path: str | Path,
         fields: dict[str, typing.Any]
-    ) -> bool:
+    )-> bool:
         """Modifie les champs ID3 d'un fichier audio spécifique."""
         path_obj = Path(file_path)
         if not is_audio(path_obj):
@@ -244,7 +213,7 @@ class CMusic(CMedia):
             )
             return False
 
-    def _write_audio_images(self) -> None:
+    def _write_audio_images(self)-> None:
         """Insère les pochettes/images dans les métadonnées ID3 des fichiers audio."""
         if not self.other_source_path or not self.other_source_path.is_file():
             return
@@ -271,7 +240,7 @@ class CMusic(CMedia):
             if not is_audio(path_obj):
                 continue
 
-            def add_images_task() -> None:
+            def add_images_task()-> None:
                 add_audio_id3_images(path_obj, images_config)  # noqa: B023
 
             try:
