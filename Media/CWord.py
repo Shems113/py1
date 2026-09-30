@@ -35,7 +35,7 @@ class CWord(CMedia):
         super().__init__(json_path, EMediaType.Word, action_type)
         self.word = None
         if IS_WINDOWS and win32:
-            self.word = self.logger.logElapsedTime(
+            self.word = self.logger.log_elapsed_time(
                 lambda: win32.Dispatch("Word.Application"), "Start Word application"
             )
             self.word.Visible = False
@@ -51,7 +51,7 @@ class CWord(CMedia):
 
     def close(self)-> None:
         if IS_WINDOWS and self.word:
-            self.logger.logElapsedTime(self.word.Quit, "Quit Word application")
+            self.logger.log_elapsed_time(self.word.Quit, "Quit Word application")
 
     @win32_required
     def read(self)-> None:
@@ -75,7 +75,7 @@ class CWord(CMedia):
         file_format: int | None = None
     )-> None:
         for file_path in self.get_source_files():
-            self.logger.logElapsedTime(
+            self.logger.log_elapsed_time(
                 lambda p=file_path: self._execute_on_document(p, document_actions, file_format),
                 f"{label_prefix}{file_path}",
             )

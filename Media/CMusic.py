@@ -123,7 +123,7 @@ class CMusic(CMedia):
 
             common_fields = get_file_common_fields(target_file_path, False)
 
-            music_auto_tags = self.logger.logElapsedTime(
+            music_auto_tags = self.logger.log_elapsed_time(
                     lambda : self.music_auto_tag.get_tags(target_file_path),
                     f"Get auto tags of {target_file_path}",
                 )
@@ -138,7 +138,7 @@ class CMusic(CMedia):
             }
 
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(
+            self.logger.log_error(
                 f"Error with {file_path} : failed to get fields ({e})"
             )
             return {}
@@ -173,7 +173,7 @@ class CMusic(CMedia):
                 return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
 
             log_msg = f"Edit {file_path} with fields {media_fields}"
-            if self.logger.logElapsedTime(edit_task, log_msg):
+            if self.logger.log_elapsed_time(edit_task, log_msg):
                 rows_to_drop.append(row.Index)
 
         if rows_to_drop:
@@ -244,7 +244,7 @@ class CMusic(CMedia):
                 add_audio_id3_images(path_obj, images_config)  # noqa: B023
 
             try:
-                self.logger.logElapsedTime(
+                self.logger.log_elapsed_time(
                     add_images_task,
                     f"Add images to {path_obj} with {images_config}",
                 )

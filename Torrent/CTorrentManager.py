@@ -49,7 +49,7 @@ class CTorrentManager:
                     results[source.value] = res
                     self.logger.log(f"[{source.value}] {res['healthy']}/{res['total']} miroir(s)/endpoint(s) accessible(s)")
                 except Exception as e:  # noqa: BLE001
-                    self.logger.logError(f"Erreur lors du health check de {source.value}: {e}")
+                    self.logger.log_error(f"Erreur lors du health check de {source.value}: {e}")
         return results
 
     def search_torrents(
@@ -82,7 +82,7 @@ class CTorrentManager:
                     all_results.extend(results)
                     self.logger.log(f"[{src.value}] Résultats récupérés : {len(results)}")
                 except Exception as e:  # noqa: BLE001
-                    self.logger.logError(f"Erreur sur {src.value}: {e}")
+                    self.logger.log_error(f"Erreur sur {src.value}: {e}")
 
         if not all_results:
             return pd.DataFrame()
@@ -107,7 +107,7 @@ class CTorrentManager:
             self.logger.log(f"Search torrents with query: {query}")
             return self.search_torrents(query, TorrentSource.ALL , export_csv=False)
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"Error {e} for {query}")
+            self.logger.log_error(f"Error {e} for {query}")
             return pd.DataFrame([{"error": str(e)}])
 
     def search_film_torrents(
@@ -151,7 +151,7 @@ class CTorrentManager:
                     if not res_df.empty:
                         results.append(res_df)
                 except Exception as e:  # noqa: BLE001
-                    self.logger.logError(f"Erreur lors du traitement d'un film: {e}")
+                    self.logger.log_error(f"Erreur lors du traitement d'un film: {e}")
 
         if results:
             final_df = pd.concat(results, ignore_index=True)
@@ -223,7 +223,7 @@ class CTorrentManager:
             self.logger.log("\nTéléchargement interrompu par l'utilisateur.")
             return False
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"\nErreur durant le téléchargement : {e}")
+            self.logger.log_error(f"\nErreur durant le téléchargement : {e}")
             return False
 
         return True

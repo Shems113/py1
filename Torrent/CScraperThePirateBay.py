@@ -77,7 +77,7 @@ class CScraperThePirateBay(CCommonTorrent):
                 )
             return results
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"Erreur API TPB: {e}")
+            self.logger.log_error(f"Erreur API TPB: {e}")
             return []
 
     @staticmethod

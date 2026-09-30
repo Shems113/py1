@@ -118,7 +118,7 @@ class CMedia:
             }
             return [str(Path(matched_file).resolve()) for matched_file in matched_files]
 
-        return self.logger.logElapsedTime(fetch_files, "Get source files")
+        return self.logger.log_elapsed_time(fetch_files, "Get source files")
 
     def init_log(self)-> None:
         """Initialise le fichier de log avec les métadonnées de l'opération."""
@@ -175,12 +175,12 @@ class CMedia:
     )-> dict[str, pd.DataFrame]:
         """Extrait les attributs des fichiers et construit le DataFrame de données."""
 
-        raw_results: dict[str, pd.DataFrame] = self.logger.logElapsedTime(
+        raw_results: dict[str, pd.DataFrame] = self.logger.log_elapsed_time(
             lambda:self._build_normalized_dataframes_by_codec(data), 
             f"Build dataframe with {log_message}{self.media_type.name} files info"
         )
 
-        agg_results: dict[str, pd.DataFrame] = self.logger.logElapsedTime(
+        agg_results: dict[str, pd.DataFrame] = self.logger.log_elapsed_time(
             lambda:self._build_aggregated_dataframes_by_codec(raw_results), 
             f"Build aggregated dataframe with {log_message}{self.media_type.name} files info"
         ) if not skip_aggregation else {}
@@ -249,4 +249,4 @@ class CMedia:
                     df, csv_file_path, self.data_separator, self.fieldsByCodec.get(codec_type)  # noqa: B023
                 )
 
-            self.logger.logElapsedTime(export_csv, f"Display {codec_type}")
+            self.logger.log_elapsed_time(export_csv, f"Display {codec_type}")

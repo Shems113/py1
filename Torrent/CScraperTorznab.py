@@ -205,13 +205,13 @@ class CScraperTorznab(CCommonTorrent):
                 )
 
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"[{self.source_name}] Erreur indexeur {indexer_id} : {e}")
+            self.logger.log_error(f"[{self.source_name}] Erreur indexeur {indexer_id} : {e}")
 
         return results
 
     def search(self, query: str)-> list[TorrentResult]:
         if not self.api_key:
-            self.logger.logError(f"[{self.source_name}] Clé API manquante.")
+            self.logger.log_error(f"[{self.source_name}] Clé API manquante.")
             return []
 
         all_results: list[TorrentResult] = []
@@ -230,6 +230,6 @@ class CScraperTorznab(CCommonTorrent):
                         all_results.extend(res)
                 except Exception as e:  # noqa: BLE001
                     idx_id = future_to_id[future]
-                    self.logger.logError(f"[{self.source_name}] Exception worker pour indexeur {idx_id} : {e}")
+                    self.logger.log_error(f"[{self.source_name}] Exception worker pour indexeur {idx_id} : {e}")
 
         return all_results

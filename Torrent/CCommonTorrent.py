@@ -79,7 +79,7 @@ class CCommonTorrent(ABC):
                 return BeautifulSoup(res.text, "html.parser")
             self.logger.log(f"[{self.source_name}] Réponse {res.status_code} pour {url}")
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"[{self.source_name}] Erreur d'accès à {url}: {e}")
+            self.logger.log_error(f"[{self.source_name}] Erreur d'accès à {url}: {e}")
         return None
 
     def fetch_with_fallback(

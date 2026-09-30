@@ -48,7 +48,7 @@ class CGmail(CMedia):
     def _call_gmail_api_service(self)-> Resource | None:
         """Authentifie l'utilisateur et initialise le service de l'API Gmail."""
         if not self.source_path or not self.source_path.is_file():
-            self.logger.logError(
+            self.logger.log_error(
                 "Error: source_path invalide pour la configuration Gmail API."
             )
             return None
@@ -79,7 +79,7 @@ class CGmail(CMedia):
             self.logger.log("Call the Gmail API")
             return build("gmail", "v1", credentials=credentials)
         except HttpError as error:
-            self.logger.logError(
+            self.logger.log_error(
                 f"An error occurred while connecting to Gmail API: {error}"
             )
             return None
@@ -101,11 +101,11 @@ class CGmail(CMedia):
         for data_type, func in [("gmailLabel",self._list_labels), ("gmailMessage", self._list_messages)]:
             results[data_type] = pd.DataFrame()
             try:
-                results[data_type] = self.logger.logElapsedTime(
+                results[data_type] = self.logger.log_elapsed_time(
                     func, f"Build dataframe with {data_type[5:]}s"
                 )
             except HttpError as error:
-                self.logger.logError(f"An error occurred getting {data_type[5:]}s: {error}")
+                self.logger.log_error(f"An error occurred getting {data_type[5:]}s: {error}")
                 results[data_type] = pd.DataFrame()
 
         return results
@@ -118,7 +118,7 @@ class CGmail(CMedia):
         request = self.gmail_api_service.users().labels().list(
             userId=self.USER_ID
         )
-        response = self.logger.logElapsedTime(
+        response = self.logger.log_elapsed_time(
             request.execute, "Get Gmail labels list"
         )
         return pd.DataFrame(response.get("labels", []))
@@ -144,7 +144,7 @@ class CGmail(CMedia):
         )
 
         while request is not None:
-            response = self.logger.logElapsedTime(
+            response = self.logger.log_elapsed_time(
                 request.execute, f"Get Gmail messages list (#{page_index})"
             )
             messages.extend(response.get("messages", []))
@@ -175,7 +175,7 @@ class CGmail(CMedia):
             def export_csv()-> None:
                 data_frame_to_csv(df, csv_path, self.data_separator)  # noqa: B023
 
-            self.logger.logElapsedTime(export_csv, f"Display {key}")
+            self.logger.log_elapsed_time(export_csv, f"Display {key}")
 
     def _build_dataframes_details(
         self,
@@ -192,7 +192,7 @@ class CGmail(CMedia):
             try:
                 message_details.append(self._get_message_details(message_id))
             except Exception as e:  # noqa: BLE001
-                self.logger.logError(
+                self.logger.log_error(
                     f"An error occurred with message Id {message_id} : {e}"
                 )
 
@@ -215,7 +215,7 @@ class CGmail(CMedia):
                 .drop_duplicates(subset=["id", "attachments"])
             )
 
-        df_result = self.logger.logElapsedTime(
+        df_result = self.logger.log_elapsed_time(
             process_details_df, "Build dataframe with Gmail message details"
         )
         return {"gmailMessageDetailsResult": df_result}
@@ -231,7 +231,7 @@ class CGmail(CMedia):
         request = self.gmail_api_service.users().messages().get(
             userId=self.USER_ID, id=message_id, format="full"
         )
-        response = self.logger.logElapsedTime(
+        response = self.logger.log_elapsed_time(
             request.execute, f"Get message detail of Id {message_id}"
         )
         payload = response.get("payload", {})
@@ -304,7 +304,7 @@ class CGmail(CMedia):
                         id=attachment_id,
                     )
                 )
-                response = self.logger.logElapsedTime(
+                response = self.logger.log_elapsed_time(
                     request.execute,
                     f"Get message attachment of Id {attachment_id}",
                 )

@@ -132,7 +132,7 @@ class CFile(CMedia):
                 return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
 
             log_msg = f"Edit {file_path} with fields {media_fields}"
-            if self.logger.logElapsedTime(edit_task, log_msg):
+            if self.logger.log_elapsed_time(edit_task, log_msg):
                 rows_to_drop.append(row.Index)
 
         if rows_to_drop:

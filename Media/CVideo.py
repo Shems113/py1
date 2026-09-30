@@ -46,7 +46,7 @@ class CVideo(CMedia):
         if self.is_streaming:
             frame_errors = {}
             if self.action_type == EActionType.ReadAndCheck:
-                frame_errors = self.logger.logElapsedTime(
+                frame_errors = self.logger.log_elapsed_time(
                     lambda: get_video_corrupted_frames_info(sys.stdin.buffer),
                     "Video frames checking from input stream..."
                 )
@@ -92,7 +92,7 @@ class CVideo(CMedia):
 
             if is_video(path_obj):
                 if self.action_type == EActionType.ReadAndCheck:
-                    frame_errors = self.logger.logElapsedTime(
+                    frame_errors = self.logger.log_elapsed_time(
                         lambda: get_video_corrupted_frames_info(path_obj),
                         f"Video frames checking of {path_obj}..."
                     )
@@ -103,7 +103,7 @@ class CVideo(CMedia):
                 result["videoOther"] = [common_fields | audio_tags]
 
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(
+            self.logger.log_error(
                 f"Error with {path_obj} : failed to get fields ({e})"
             )
 
@@ -134,7 +134,7 @@ class CVideo(CMedia):
                 return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
 
             log_msg = f"Edit {file_path} with fields {media_fields}"
-            if self.logger.logElapsedTime(edit_task, log_msg):
+            if self.logger.log_elapsed_time(edit_task, log_msg):
                 rows_to_drop.append(row.Index)
 
         if rows_to_drop:
@@ -176,7 +176,7 @@ class CVideo(CMedia):
             return True
 
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(
+            self.logger.log_error(
                 f"Error with {path_obj} : failed to edit tags ({e})"
             )
             return False
@@ -212,7 +212,7 @@ class CVideo(CMedia):
             raw_pcm = extract_mono_16khz_pcm_stream(path_obj)
 
             if not raw_pcm:
-                self.logger.logError(
+                self.logger.log_error(
                     f"FFmpeg stream extraction returned empty data for {path_obj.name}"
                 )
                 return {}
@@ -226,7 +226,7 @@ class CVideo(CMedia):
             return {"audioTranscription": audio_transcription}
 
         except Exception as ex:  # noqa: BLE001
-            self.logger.logError(f"Error transcribing {path_obj.name}: {ex}")
+            self.logger.log_error(f"Error transcribing {path_obj.name}: {ex}")
             return {}
 
     def _transcribe_video_audio_stream(
@@ -246,7 +246,7 @@ class CVideo(CMedia):
         if not self._validate_audio_array(audio):
             return []
 
-        segment_data = self.logger.logElapsedTime(
+        segment_data = self.logger.log_elapsed_time(
             lambda: self.whisper_model.get_file_transcription_data(
                 audio,
                 beam_size=5,
@@ -304,11 +304,11 @@ class CVideo(CMedia):
     def _validate_raw_pcm_stream(self, raw_data: bytes)-> bool:
         """Contrôle d'intégrité du buffer binaire PCM avant conversion."""
         if len(raw_data) == 0:
-            self.logger.logError("Stream payload is empty (0 bytes received).")
+            self.logger.log_error("Stream payload is empty (0 bytes received).")
             return False
 
         if len(raw_data) % 2 != 0:
-            self.logger.logError(
+            self.logger.log_error(
                 f"Invalid PCM 16-bit alignment: payload size ({len(raw_data)} bytes) is not a multiple of 2."
             )
             return False
@@ -318,19 +318,19 @@ class CVideo(CMedia):
     def _validate_audio_array(self, audio: np.ndarray)-> bool:
         """Validation stricte des dimensions et du format du tableau NumPy converti."""
         if audio.dtype != np.float32:
-            self.logger.logError(
+            self.logger.log_error(
                 f"Invalid audio dtype: expected float32, got {audio.dtype}"
             )
             return False
 
         if audio.ndim != 1:
-            self.logger.logError(
+            self.logger.log_error(
                 f"Invalid audio layout: expected 1D (mono), got shape {audio.shape}"
             )
             return False
 
         if audio.size == 0:
-            self.logger.logError("Converted audio array is empty.")
+            self.logger.log_error("Converted audio array is empty.")
             return False
 
         return True

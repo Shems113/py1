@@ -50,7 +50,7 @@ class CWhisperModel:
                 compute_type=self.compute_type,
             )
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"Failed to load Whisper model: {e}")
+            self.logger.log_error(f"Failed to load Whisper model: {e}")
             return None
 
     def get_file_transcription_data(
@@ -79,7 +79,7 @@ class CWhisperModel:
 
         model_instance = self.lazy_model.value
         if model_instance is None:
-            self.logger.logError("WhisperModel is not initialized.")
+            self.logger.log_error("WhisperModel is not initialized.")
             return []
 
         try:
@@ -134,5 +134,5 @@ class CWhisperModel:
             return results
 
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"Error during transcription process: {e}")
+            self.logger.log_error(f"Error during transcription process: {e}")
             return []

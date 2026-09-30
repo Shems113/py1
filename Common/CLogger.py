@@ -38,7 +38,7 @@ class CLogger:
         message = " ".join(str(v) for v in values)
         logger.info(message)
 
-    def logError(self, *values: Any)-> None:
+    def log_error(self, *values: Any)-> None:
         """Log un message avec le niveau ERROR."""
         message = " ".join(str(v) for v in values)
         logger.error(message)
@@ -51,7 +51,7 @@ class CLogger:
         except Exception:  # noqa: BLE001
             self.log(f"Processed {index}/{total} : {file_path}")
 
-    def logElapsedTime(self, func: Callable[[], Any], func_name: str)-> Any:
+    def log_elapsed_time(self, func: Callable[[], Any], func_name: str)-> Any:
         """Mesure et log le temps d'exécution d'une fonction."""
         sep = "-------------------------------------------------------------------"
         self.log(sep)

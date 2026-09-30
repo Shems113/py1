@@ -93,7 +93,7 @@ class CScraperLimeTorrents(CCommonTorrent):
                         "detail_url": detail_link,
                     })
                 except Exception as e:  # noqa: BLE001
-                    self.logger.logError(f"Erreur parsing Limetorrents: {e}")
+                    self.logger.log_error(f"Erreur parsing Limetorrents: {e}")
                     continue
 
             if not raw_results:
@@ -112,7 +112,7 @@ class CScraperLimeTorrents(CCommonTorrent):
                             try:
                                 item["magnet"] = future.result()
                             except Exception as e:  # noqa: BLE001
-                                self.logger.logError(f"Erreur fetch detail magnet: {e}")
+                                self.logger.log_error(f"Erreur fetch detail magnet: {e}")
 
             return [TorrentResult(**r) for r in raw_results]
 

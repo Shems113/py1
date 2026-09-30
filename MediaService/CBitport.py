@@ -143,7 +143,7 @@ class CBitport:
         root_code = root_data.get("code")
 
         if not root_code:
-            self.logger.logError("Erreur: Impossible de trouver le dossier 'root' sur Bitport.")
+            self.logger.log_error("Erreur: Impossible de trouver le dossier 'root' sur Bitport.")
             return False
 
         existing_folders = {
@@ -153,7 +153,7 @@ class CBitport:
         df_input = data_frame_from_csv(inputFile, ";")
         for col in ["tmdb_id", "name"]:
             if col not in df_input.columns:
-                self.logger.logError(f"Erreur: Le fichier d'entrée doit contenir une colonne '{col}'.")
+                self.logger.log_error(f"Erreur: Le fichier d'entrée doit contenir une colonne '{col}'.")
                 return False
 
         unique_folder_names = (

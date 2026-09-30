@@ -39,7 +39,7 @@ class COpenSubtitles:
             return True
 
         if not all([self.opensubtitles_user, self.opensubtitles_pass, self.opensubtitles_api_key]):
-            self.logger.logError("Erreur : Identifiants ou clé API OpenSubtitles manquants dans les variables d'environnement.")
+            self.logger.log_error("Erreur : Identifiants ou clé API OpenSubtitles manquants dans les variables d'environnement.")
             return False
 
         try:
@@ -52,7 +52,7 @@ class COpenSubtitles:
             self._is_logged_in = True
             return True
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"Erreur d'authentification OpenSubtitles : {e}")
+            self.logger.log_error(f"Erreur d'authentification OpenSubtitles : {e}")
             self._is_logged_in = False
             return False
 
@@ -83,7 +83,7 @@ class COpenSubtitles:
             return pd.json_normalize(data_list)
 
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"Erreur lors de la recherche de sous-titres pour {name}: {e}")
+            self.logger.log_error(f"Erreur lors de la recherche de sous-titres pour {name}: {e}")
             return pd.DataFrame()
 
     def download_film_subtitle(
@@ -119,7 +119,7 @@ class COpenSubtitles:
             return pd.DataFrame([{"subtitlePath": sub_path}])
 
         except Exception as e:  # noqa: BLE001
-            self.logger.logError(f"Erreur au téléchargement du sous-titre {file_id} : {e}")
+            self.logger.log_error(f"Erreur au téléchargement du sous-titre {file_id} : {e}")
             return pd.DataFrame([{"subtitlePath": "ERROR"}])
 
     # --- Routes Flask ---

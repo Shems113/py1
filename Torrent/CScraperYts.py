@@ -75,5 +75,5 @@ class CScraperYts(CCommonTorrent):
                 if results:
                     return results
             except Exception as e:  # noqa: BLE001
-                self.logger.logError(f"Erreur API YTS {endpoint}: {e}")
+                self.logger.log_error(f"Erreur API YTS {endpoint}: {e}")
         return []

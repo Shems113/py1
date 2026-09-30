@@ -78,7 +78,7 @@ class CSubtitle(CMedia):
             self.logger.log(f"Transcription successful: {path_obj.name} -> Saved to {srt_obj_path.name}")
 
         except Exception as ex:  # noqa: BLE001
-            self.logger.logError(f"Error transcribing {path_obj.name}: {ex}")
+            self.logger.log_error(f"Error transcribing {path_obj.name}: {ex}")
 
         return result
 
@@ -96,10 +96,10 @@ class CSubtitle(CMedia):
         result: dict[str, list[dict[str, typing.Any]]] = {}
 
         if not any(srt_path_objs):
-            self.logger.logError(f"No corresponding SRT file found for {file_path_obj.name}. Skipping synchronization check.")
+            self.logger.log_error(f"No corresponding SRT file found for {file_path_obj.name}. Skipping synchronization check.")
             return result
 
-        segmentData = self.logger.logElapsedTime(
+        segmentData = self.logger.log_elapsed_time(
             lambda: self.whisper_model.get_file_transcription_data(file_path_obj, voice_activity_detection_filter=True),
             f"Processing {file_path_obj.name} to extract VAD speech intervals..."
         )
@@ -107,7 +107,7 @@ class CSubtitle(CMedia):
         speech_intervals = [{"start": seg["start"], "end": seg["end"]} for seg in segmentData if seg["text"].strip()]
 
         if not speech_intervals:
-            self.logger.logError(f"No speech detected in {file_path_obj.name}.")
+            self.logger.log_error(f"No speech detected in {file_path_obj.name}.")
             return result
 
         all_reports = []
