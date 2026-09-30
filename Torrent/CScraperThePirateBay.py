@@ -11,7 +11,10 @@ from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 
 
 class CScraperThePirateBay(CCommonTorrent):
-    def __init__(self,logger:Logger):
+    def __init__(
+        self,
+        logger:Logger
+        )-> None:
         mirrors = get_mirrors_from_env(
             "THEPIRATEBAY_MIRRORS",
             ["https://apibay.org"],
@@ -19,10 +22,10 @@ class CScraperThePirateBay(CCommonTorrent):
         super().__init__(mirrors,logger=logger)
 
     @property
-    def source_name(self) -> str:
+    def source_name(self)-> str:
         return TorrentSource.THEPIRATEBAY.value
 
-    def search(self, query: str) -> list[TorrentResult]:
+    def search(self, query: str)-> list[TorrentResult]:
         encoded = urllib.parse.quote(clean_query(query))
         url = f"https://apibay.org/q.php?q={encoded}"
         trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in self.trackers)
@@ -78,7 +81,7 @@ class CScraperThePirateBay(CCommonTorrent):
             return []
 
     @staticmethod
-    def _format_bytes(size_in_bytes: int) -> str:
+    def _format_bytes(size_in_bytes: int)-> str:
         """Convertit une taille en octets vers MB, GB, TB, etc."""
         for unit in ["B", "KB", "MB", "GB", "TB"]:
             if abs(size_in_bytes) < 1024.0:

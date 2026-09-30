@@ -15,13 +15,14 @@ class CVideoApp:
 
     def __init__(
         self,
-        input_dir: str | Path = r"D:\Result\Film"):
+        input_dir: str | Path = r"D:\Result\Film"
+        )-> None:
         # Configuration des chemins d'accès
         self.input_directory = Path(input_dir)
         self.input_directory.mkdir(parents=True, exist_ok=True)
 
         # Instanciation des services
-        self.torrent_manager = CTorrentManager([str(self.input_directory / "Logs.csv")])
+        self.torrent_manager = CTorrentManager(self.input_directory / "Logs.csv")
         logger=self.torrent_manager.logger
         self.bitport = CBitport(logger)
         self.opensubtitles = COpenSubtitles(logger)
@@ -41,7 +42,7 @@ class CVideoApp:
         # Enregistrement des routes Flask
         self._setup_routes()
 
-    def _setup_routes(self) -> None:
+    def _setup_routes(self)-> None:
         """Déclaration explicite de toutes les routes de l'application Flask."""
         @self.app.route("/")
         def home():
@@ -89,11 +90,15 @@ class CVideoApp:
         @self.app.route("/searchFilmsTorrents", endpoint="route_search_films_torrents")
         def route_search_films_torrents():
             return make_action(self.torrent_manager.route_search_films_torrents, ("films", "films_torrents"))()
-
+  
         @self.app.route("/downloadFilms", endpoint="route_download_films")
         def route_download_films():
             return make_action(self.torrent_manager.route_download_films, ("films_torrents", "output"))()
 
+        @self.app.route("/downloadFilmsFromFreebox", endpoint="route_download_films_from_freebox")
+        def route_download_films_from_freebox():
+            return make_action(self.torrent_manager.route_download_films_from_freebox, ("films_torrents", "output"))()
+              
         # ----------------------------------------------------------------------
 
         @self.app.route("/discoverBitportCloudFolders")
@@ -127,7 +132,7 @@ class CVideoApp:
         host: str = "127.0.0.1",
         port: int = 5000,
         debug: bool = False
-        ) -> None:
+        )-> None:
         """Démarre le serveur web Flask et ouvre automatiquement le navigateur."""
         url = f"http://{host}:{port}"
         print(f"Lancement de l'application sur {url}")

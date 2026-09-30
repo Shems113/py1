@@ -55,7 +55,7 @@ class FreeboxTLSAdapter(HTTPAdapter):
     ne respectent pas : on le désactive, sans désactiver la vérification elle-même.
     """
 
-    def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
+    def init_poolmanager(self, *args: Any, **kwargs: Any)-> None:
         if not CA_FILE.is_file():
             raise FileNotFoundError(f"Certificats Freebox introuvables : {CA_FILE}")
         ctx = ssl.create_default_context(cafile=str(CA_FILE))
@@ -65,14 +65,14 @@ class FreeboxTLSAdapter(HTTPAdapter):
 
 
 @functools.cache
-def _session(secure: bool) -> requests.Session:
+def _session(secure: bool)-> requests.Session:
     session = requests.Session()
     if secure:
         session.mount("https://", FreeboxTLSAdapter())
     return session
 
 
-def http(url: str) -> requests.Session:
+def http(url: str)-> requests.Session:
     """Session adaptée à l'URL, créée au premier appel (et non à l'import du module).
 
     Le certificat Freebox (freebox_ca.pem) n'est chargé que pour les URL https.
@@ -84,7 +84,7 @@ class FreeboxError(Exception):
     """Erreur renvoyée par l'API Freebox (success = false)."""
 
 
-def call(method: str, url: str, session_token: str | None = None, **kwargs: Any) -> Any:
+def call(method: str, url: str, session_token: str | None = None, **kwargs: Any)-> Any:
     """Appelle l'API et renvoie le champ `result`, ou lève FreeboxError."""
     headers = {"X-Fbx-App-Auth": session_token} if session_token else {}
     response = http(url).request(method, url, headers=headers, timeout=TIMEOUT, **kwargs)
@@ -97,7 +97,7 @@ def call(method: str, url: str, session_token: str | None = None, **kwargs: Any)
 # --------------------------------------------------------------------------- #
 # Enregistrement (une seule fois, sur le réseau local)
 # --------------------------------------------------------------------------- #
-def find_api_major(base_url: str, announced: int) -> str:
+def find_api_major(base_url: str, announced: int)-> str:
     """Première version d'API acceptée dans l'URL, en partant de la version annoncée.
 
     La box peut annoncer une version (ex. 16.1) sans encore l'accepter dans l'URL
@@ -113,7 +113,7 @@ def find_api_major(base_url: str, announced: int) -> str:
     raise FreeboxError("aucune version d'API acceptée par la Freebox")
 
 
-def register() -> None:
+def register()-> None:
     """Demande l'autorisation à la Freebox et sauvegarde le jeton d'application."""
     info = http(LOCAL_URL).get(f"{LOCAL_URL}/api_version", timeout=TIMEOUT).json()
     announced = int(info["api_version"].split(".")[0])
@@ -153,19 +153,19 @@ def register() -> None:
 # --------------------------------------------------------------------------- #
 # Session (local ou à distance)
 # --------------------------------------------------------------------------- #
-def load_config() -> dict[str, Any]:
+def load_config()-> dict[str, Any]:
     if not TOKEN_FILE.is_file():
         sys.exit("❌ Aucun jeton : lance d'abord `python freebox_api.py register` depuis chez toi.")
     return json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
 
 
-def api_url(config: dict[str, Any], local: bool) -> str:
+def api_url(config: dict[str, Any], local: bool)-> str:
     """URL de base de l'API : HTTP en local, HTTPS (certificat Freebox, vérifié via freebox_ca.pem) à distance."""
     root = LOCAL_URL if local else f"https://{config['api_domain']}:{config['https_port']}"
     return f"{root}{config['api_base_url']}v{config['api_major']}"
 
 
-def open_session(config: dict[str, Any], base: str) -> str:
+def open_session(config: dict[str, Any], base: str)-> str:
     """Ouvre une session : password = HMAC-SHA1(app_token, challenge)."""
     challenge = call("GET", f"{base}/login/")["challenge"]
     password = hmac.new(config["app_token"].encode(), challenge.encode(), hashlib.sha1).hexdigest()
@@ -173,7 +173,7 @@ def open_session(config: dict[str, Any], base: str) -> str:
     return result["session_token"]
 
 
-def connect(local: bool = False) -> tuple[str, str]:
+def connect(local: bool = False)-> tuple[str, str]:
     """Ouvre une session et renvoie (URL de base de l'API, jeton de session)."""
     config = load_config()
     base = api_url(config, local)
@@ -183,7 +183,7 @@ def connect(local: bool = False) -> tuple[str, str]:
 # --------------------------------------------------------------------------- #
 # Téléchargements (droit « Accès au gestionnaire de téléchargements »)
 # --------------------------------------------------------------------------- #
-def add_magnet(magnet: str, download_dir: str | None = None, local: bool = False) -> int:
+def add_magnet(magnet: str, download_dir: str | None = None, local: bool = False)-> int:
     """Ajoute un lien magnet au gestionnaire de téléchargements de la Freebox.
 
     download_dir : dossier sur le disque de la box (ex. "/Freebox/Téléchargements").
@@ -201,7 +201,7 @@ def add_magnet(magnet: str, download_dir: str | None = None, local: bool = False
     return call("POST", f"{base}/downloads/add", token, data=form)["id"]
 
 
-def get_download(task_id: int, local: bool = False) -> dict[str, Any]:
+def get_download(task_id: int, local: bool = False)-> dict[str, Any]:
     """Renvoie l'état d'une tâche : name, status, size, rx_pct, eta, rx_rate..."""
     base, token = connect(local)
     return call("GET", f"{base}/downloads/{task_id}", token)
@@ -210,7 +210,7 @@ def get_download(task_id: int, local: bool = False) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # Commandes
 # --------------------------------------------------------------------------- #
-def cmd_status(base: str, token: str) -> None:
+def cmd_status(base: str, token: str)-> None:
     c = call("GET", f"{base}/connection/", token)
     print(f"État       : {c.get('state')}")
     print(f"Média      : {c.get('media')}")
@@ -219,7 +219,7 @@ def cmd_status(base: str, token: str) -> None:
     print(f"Débit ↓/↑  : {c.get('rate_down', 0) / 1e6:.2f} / {c.get('rate_up', 0) / 1e6:.2f} Mo/s")
 
 
-def cmd_info(base: str, token: str) -> None:
+def cmd_info(base: str, token: str)-> None:
     s = call("GET", f"{base}/system/", token)
     for key in ("model_info", "firmware_version", "uptime", "mac", "serial"):
         value = s.get(key)
@@ -228,12 +228,12 @@ def cmd_info(base: str, token: str) -> None:
         print(f"{key:<17}: {value}")
 
 
-def cmd_reboot(base: str, token: str) -> None:
+def cmd_reboot(base: str, token: str)-> None:
     call("POST", f"{base}/system/reboot/", token)
     print("🔄 Redémarrage demandé.")
 
 
-def print_download(task: dict[str, Any]) -> None:
+def print_download(task: dict[str, Any])-> None:
     # rx_pct est exprimé en centièmes de pourcent (10000 = 100 %)
     pct = task.get("rx_pct", 0) / 100
     size_go = task.get("size", 0) / 1e9
@@ -242,7 +242,7 @@ def print_download(task: dict[str, Any]) -> None:
     print(f"   {task.get('status')} — {pct:.1f} % de {size_go:.2f} Go — reste ~{eta // 60} min")
 
 
-def main() -> None:
+def main()-> None:
     parser = argparse.ArgumentParser(description="Client API Freebox OS")
     parser.add_argument("command", choices=["register", "status", "info", "reboot", "download", "progress"])
     parser.add_argument("target", nargs="?", help="lien magnet (download) ou id de tâche (progress)")

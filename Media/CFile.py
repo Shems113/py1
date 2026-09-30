@@ -27,10 +27,10 @@ class CFile(CMedia):
         self,
         json_path: str | Path,
         action_type: EActionType
-    ) -> None:
+        )-> None:
         super().__init__(json_path, EMediaType.File, action_type)
 
-    def read(self) -> None:
+    def read(self)-> None:
         """Lit les fichiers génériques et exporte l'analyse sous forme de fichier CSV."""
         if not self.other_source_path:
             self.logger.log(
@@ -45,7 +45,7 @@ class CFile(CMedia):
     def _get_file_attributes_fields(
         self,
         file_path: str | Path
-    ) -> dict[str, list[dict[str, Any]]]:
+    )-> dict[str, list[dict[str, Any]]]:
         """Récupère les métadonnées de base du fichier et le déplace/copie si configuré."""
         path_obj = Path(file_path)
         self.logger.log(f"Get attributes fields of {path_obj}")
@@ -70,14 +70,14 @@ class CFile(CMedia):
                 target_dir = self.target_path / extension.replace(".", "")
                 file_name_without_ext = get_file_name_without_extension(path_obj)
 
-                def file_name_func(idx: int, _: str) -> str:
+                def file_name_func(idx: int, _: str)-> str:
                     index_str = str(idx) if idx != 0 else ""
                     return str(
                         target_dir
                         / f"{file_name_without_ext}{index_str}{extension}"
                     )
 
-                def is_same_media_func(other_file: str | Path) -> bool:
+                def is_same_media_func(other_file: str | Path)-> bool:
                     other_path = Path(other_file)
                     return (
                         other_path.is_file()
@@ -107,7 +107,7 @@ class CFile(CMedia):
             )
             return {}
 
-    def write(self) -> None:
+    def write(self)-> None:
         """Met à jour les étiquettes des fichiers à partir de la source CSV."""
         if not self.source_path:
             return
@@ -128,7 +128,7 @@ class CFile(CMedia):
                 if pd.notna(getattr(row, col))
             }
 
-            def edit_task() -> bool:
+            def edit_task()-> bool:
                 return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
 
             log_msg = f"Edit {file_path} with fields {media_fields}"
@@ -144,7 +144,7 @@ class CFile(CMedia):
         self,
         file_path: str | Path,
         fields: dict[str, Any]
-    ) -> bool:
+    )-> bool:
         """Modifie les étiquettes si le fichier s'avère être du contenu multimédia (Audio/Vidéo)."""
         path_obj = Path(file_path)
         if not (is_audio(path_obj) or is_video(path_obj)):

@@ -11,7 +11,7 @@ from Media.CVideo import CVideo as Video
 from Media.CWord import CWord as Word
 
 # Valeurs par défaut
-DEFAULT_MEDIA = EMediaType.Gmail
+DEFAULT_MEDIA = EMediaType.Music
 DEFAULT_ACTION = EActionType.Read
 
 # Mappings des classes de médias et des actions associées
@@ -37,15 +37,16 @@ ACTION_MAPPING: dict[EActionType, str] = {
 
 
 def process(
-    media: File | Gmail | Music | Subtitle | Video | Word, action_name: str
-) -> None:
+    media: File | Gmail | Music | Subtitle | Video | Word,
+    action_name: str
+    )-> None:
     """Initialise les logs et exécute la méthode d'action sur l'instance de média."""
     if hasattr(media, action_name) and callable(getattr(media, action_name)):
         media.init_log()
         getattr(media, action_name)()
 
 
-def main() -> None:
+def main()-> None:
     """Point d'entrée principal analysant les arguments de la ligne de commande."""
     parser = argparse.ArgumentParser(description="Process some media files.")
     parser.add_argument(

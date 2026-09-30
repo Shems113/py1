@@ -14,7 +14,8 @@ class CTorrentDownloader:
     def __init__(
         self,
         magnet_data: dict[str, str | int],
-        output_dir: Path | str) -> None:
+        output_dir: Path | str
+        )-> None:
         self.magnet_data = magnet_data
         self.base_save_path = Path(output_dir).resolve()
         self.base_save_path.mkdir(parents=True, exist_ok=True)
@@ -22,10 +23,9 @@ class CTorrentDownloader:
         self.session = lt.session({
             "listen_interfaces": "0.0.0.0:6881",
             "enable_dht": True,
-            "active_downloads": -1,
-        })
+            "active_downloads": -1})
 
-    def _add_magnets(self) -> list[lt.torrent_handle]:
+    def _add_magnets(self)-> list[lt.torrent_handle]:
         """Ajoute les magnets et configure les dossiers cibles par ID."""
         handles = []
         video_exts = get_video_extensions()
@@ -48,7 +48,7 @@ class CTorrentDownloader:
 
         return handles
 
-    def _apply_video_filter(self, handle: lt.torrent_handle, tf: lt.torrent_info) -> None:
+    def _apply_video_filter(self, handle: lt.torrent_handle, tf: lt.torrent_info)-> None:
         """Active uniquement le téléchargement des fichiers vidéo."""
         priorities = [
             1 if Path(tf.files().file_path(i)).suffix.lower() in handle.video_extensions else 0
@@ -57,7 +57,7 @@ class CTorrentDownloader:
         handle.prioritize_files(priorities)
         handle.filtered = True
 
-    def download_from_magnets(self) -> None:
+    def download_from_magnets(self)-> None:
         """Boucle principale de suivi des téléchargements."""
         handles = self._add_magnets()
         print("\n--- Téléchargement en cours ---\n")

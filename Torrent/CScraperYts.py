@@ -8,7 +8,10 @@ from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 
 
 class CScraperYts(CCommonTorrent):
-    def __init__(self,logger:Logger):
+    def __init__(
+        self,
+        logger:Logger
+        )-> None:
         mirrors = get_mirrors_from_env(
             "YTS_ENDPOINTS",
             [
@@ -26,10 +29,10 @@ class CScraperYts(CCommonTorrent):
         super().__init__(mirrors, logger, trackers)
 
     @property
-    def source_name(self) -> str:
+    def source_name(self)-> str:
         return TorrentSource.YTS.value
 
-    def search(self, query: str) -> list[TorrentResult]:
+    def search(self, query: str)-> list[TorrentResult]:
         encoded = urllib.parse.quote(query.strip())
         trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in self.trackers)
 

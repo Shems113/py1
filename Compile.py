@@ -37,7 +37,7 @@ OK, WARN, ERROR = "✅", "⚠️", "❌"
 # --------------------------------------------------------------------------- #
 # Utilitaires
 # --------------------------------------------------------------------------- #
-def iter_project_files() -> list[Path]:
+def iter_project_files()-> list[Path]:
     """Liste les .py du projet, hors dossiers cachés, environnements virtuels et __pycache__."""
     files = []
     for py_file in sorted(PROJECT_ROOT.rglob("*.py")):
@@ -48,17 +48,17 @@ def iter_project_files() -> list[Path]:
     return files
 
 
-def indent(text: str) -> str:
+def indent(text: str)-> str:
     """Indente chaque ligne d'une sortie d'outil pour la lisibilité."""
     return "\n".join(f"   {line}" for line in text.strip().splitlines())
 
 
-def ruff_summary(output: str) -> str:
+def ruff_summary(output: str)-> str:
     """Extrait la ligne « Found N errors » de la sortie Ruff."""
     return next((line for line in output.splitlines() if line.startswith("Found")), output.strip())
 
 
-def run_ruff(*args: str) -> subprocess.CompletedProcess:
+def run_ruff(*args: str)-> subprocess.CompletedProcess:
     """Lance l'exécutable Ruff de l'environnement courant (Ruff n'a pas d'API Python)."""
     return subprocess.run(
         [find_ruff_bin(), *args],
@@ -72,7 +72,7 @@ def run_ruff(*args: str) -> subprocess.CompletedProcess:
 # --------------------------------------------------------------------------- #
 # Contrôles : chacun renvoie (statut, résumé d'une ligne)
 # --------------------------------------------------------------------------- #
-def check_syntax() -> tuple[str, str]:
+def check_syntax()-> tuple[str, str]:
     """Compile chaque fichier pour détecter les erreurs de syntaxe."""
     errors = 0
     for py_file in iter_project_files():
@@ -84,7 +84,7 @@ def check_syntax() -> tuple[str, str]:
     return (ERROR, f"{errors} fichier(s) en erreur") if errors else (OK, "aucune erreur de syntaxe")
 
 
-def fix_unused_imports() -> tuple[str, str]:
+def fix_unused_imports()-> tuple[str, str]:
     """Supprime automatiquement les imports inutilisés (F401)."""
     result = run_ruff("check", "--select", "F401", "--fix", "--output-format", "concise", ".")
     output = result.stdout or result.stderr
@@ -92,7 +92,7 @@ def fix_unused_imports() -> tuple[str, str]:
     return (OK, "imports inutilisés nettoyés") if result.returncode == 0 else (WARN, ruff_summary(output))
 
 
-def check_ruff_lint() -> tuple[str, str]:
+def check_ruff_lint()-> tuple[str, str]:
     """Lint Ruff avec la configuration du projet (ruff.toml) : noms non définis, imports mal placés..."""
     result = run_ruff("check", "--output-format", "concise", ".")
     output = result.stdout or result.stderr
@@ -102,7 +102,7 @@ def check_ruff_lint() -> tuple[str, str]:
     return ERROR, ruff_summary(output)
 
 
-def check_module_imports() -> tuple[str, str]:
+def check_module_imports()-> tuple[str, str]:
     """Importe chaque module : détecte les erreurs qui n'apparaissent qu'au chargement.
 
     Exemples : NameError (Optional non importé), TypeError ([Optional][str]),
@@ -127,7 +127,7 @@ def check_module_imports() -> tuple[str, str]:
     return OK, f"{total} modules chargés"
 
 
-def check_types(show_details: bool) -> tuple[str, str]:
+def check_types(show_details: bool)-> tuple[str, str]:
     """Vérification de types avec mypy (non bloquant : beaucoup de remarques sont des annotations)."""
     targets = [str(p.relative_to(PROJECT_ROOT)) for p in iter_project_files() if p != THIS_FILE]
     stdout, stderr, status = mypy_api.run(
@@ -151,7 +151,7 @@ def check_types(show_details: bool) -> tuple[str, str]:
     return WARN, f"{len(errors)} remarque(s) de typage"
 
 
-def check_hardcoded_secrets() -> tuple[str, str]:
+def check_hardcoded_secrets()-> tuple[str, str]:
     """Repère les mots de passe / tokens écrits en dur (règles Bandit S105-S107 de Ruff)."""
     result = run_ruff("check", "--select", "S105,S106,S107", "--output-format", "concise", "--no-fix", ".")
     if result.returncode == 0:
@@ -161,7 +161,7 @@ def check_hardcoded_secrets() -> tuple[str, str]:
     return WARN, f"{len(findings)} secret(s) probable(s) dans le code"
 
 
-def check_requirements_installed() -> tuple[str, str]:
+def check_requirements_installed()-> tuple[str, str]:
     """Vérifie que chaque paquet de requirements.txt est installé dans l'environnement courant."""
     if not REQUIREMENTS_FILE.is_file():
         return WARN, "requirements.txt introuvable"
@@ -193,7 +193,7 @@ def check_requirements_installed() -> tuple[str, str]:
     return OK, "tous les paquets requis sont installés"
 
 
-def check_unused_requirements() -> tuple[str, str]:
+def check_unused_requirements()-> tuple[str, str]:
     """Paquets déclarés mais non importés, ou importés mais non déclarés (deptry)."""
     args = [
         str(PROJECT_ROOT),
@@ -214,7 +214,7 @@ def check_unused_requirements() -> tuple[str, str]:
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
-def main() -> int:
+def main()-> int:
     parser = argparse.ArgumentParser(description="Contrôle qualité du projet.")
     parser.add_argument("--details", action="store_true", help="affiche le détail complet de mypy")
     args = parser.parse_args()

@@ -15,7 +15,7 @@ from Common.Helpers.System import IS_LINUX, IS_MY_GPU_MACHINE
 
 
 @functools.cache
-def _hw_device() -> str | None:
+def _hw_device()-> str | None:
     """Accélérateur matériel utilisable sur cette machine, testé une seule fois par processus.
 
     - Windows (TX16PRO uniquement) : D3D11VA, GPU AMD intégré
@@ -38,7 +38,7 @@ def _hw_device() -> str | None:
     return device
 
 
-def _open_container(source: str | BinaryIO) -> Any:
+def _open_container(source: str | BinaryIO)-> Any:
     """Ouvre le conteneur en décodage GPU si la machine le permet, sinon en décodage CPU.
 
     Les images décodées restent sur le GPU (is_hw_owned) : aucune copie vers la RAM,
@@ -55,7 +55,7 @@ def _open_container(source: str | BinaryIO) -> Any:
                 source.seek(0)  # flux déjà entamé : on le rembobine avant de réessayer en CPU
     return av.open(source)
 
-def get_video_extensions() -> set[str]:
+def get_video_extensions()-> set[str]:
     """Retourne l'ensemble de toutes les extensions de fichiers vidéo référencées par mimetypes."""
     mimetypes.init()
     return {
@@ -66,7 +66,7 @@ def get_video_extensions() -> set[str]:
 
 def get_video_streams_and_chapters(
     input_source: str | Path | BinaryIO
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+)-> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Récupère simultanément les flux vidéo/audio et les chapitres via ffprobe.
 
     Accepte un chemin de fichier (str/Path) ou un flux streaming (ex: sys.stdin.buffer).
@@ -96,7 +96,7 @@ def get_video_streams_and_chapters(
 
 def get_video_corrupted_frames_info(
     input_source: str | Path | BinaryIO
-) -> dict[str, Any]:
+)-> dict[str, Any]:
     """Décode le flux avec PyAV, compte les frames invalides et calcule le ratio de corruption.
     Accepte un chemin de fichier (str/Path) ou un flux streaming reçu par SSH (ex: sys.stdin.buffer).
     Sur Windows (TX16PRO), le décodage passe par le GPU (D3D11VA) pour les codecs qu'il supporte.
@@ -145,7 +145,7 @@ def get_video_corrupted_frames_info(
         "hw_decoding": hw_decoding,
     }
 
-def _stream_duration_sec(stream: Any, container: Any) -> float | None:
+def _stream_duration_sec(stream: Any, container: Any)-> float | None:
     """Durée en secondes : durée du flux (en unités time_base), sinon durée du conteneur."""
     if stream.duration is not None and stream.time_base is not None:
         return float(stream.duration * stream.time_base)
@@ -154,7 +154,7 @@ def _stream_duration_sec(stream: Any, container: Any) -> float | None:
     return None
 
 
-def _to_float_samples(frame: Any) -> np.ndarray:
+def _to_float_samples(frame: Any)-> np.ndarray:
     """Convertit une frame audio en échantillons float normalisés dans [-1, 1]."""
     samples = frame.to_ndarray()
     if np.issubdtype(samples.dtype, np.integer):
@@ -162,12 +162,12 @@ def _to_float_samples(frame: Any) -> np.ndarray:
     return samples.astype(np.float64, copy=False)
 
 
-def _to_db(value: float) -> float:
+def _to_db(value: float)-> float:
     return round(20.0 * float(np.log10(value)), 2) if value > 0 else -120.0
 
 def get_video_quality_indicators(
     input_source: str | Path | BinaryIO
-) -> dict[str, Any]:
+)-> dict[str, Any]:
     """Analyse complète d'une vidéo en une seule passe de décodage.
 
     Accepte un chemin de fichier (str/Path) ou un flux binaire (ex: sys.stdin.buffer).
@@ -308,7 +308,7 @@ def get_video_quality_indicators(
     def _r(
         value: float | None,
         digits: int
-        ) -> float | None:
+        )-> float | None:
         return round(value, digits) if value is not None else None
 
     return {

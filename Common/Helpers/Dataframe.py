@@ -1,3 +1,4 @@
+import json
 import locale
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ _DECIMAL_SEPARATOR: str | None = None
 def data_frame_from_csv(
     file_path: str | Path,
     separator: str
-) -> pd.DataFrame:
+)-> pd.DataFrame:
     """Lit un CSV avec détection d'encodage."""
     with open(file_path, "rb") as f:
         encoding = (
@@ -30,7 +31,7 @@ def data_frame_to_csv(
     target: str | Path | IO[str],
     separator: str,
     fields: list[str] | None = None,
-) -> None:
+)-> None:
     """Exporte un DataFrame vers un CSV ou un flux stdout sans rompre la structure."""
     if isinstance(target, (str, Path)):
         path_obj = Path(target)
@@ -60,7 +61,15 @@ def data_frame_to_csv(
         **extra_kwargs,
     )
 
-def _get_decimal_separator() -> str:
+def data_frame_column_hashable(col: pd.Series) -> pd.Series:
+    """Rend une colonne comptable : listes éclatées, dicts sérialisés."""
+    if col.dtype != object:          # numériques, dates… : rien à faire, coût nul
+        return col
+    if col.map(lambda v: isinstance(v, (list, tuple, set))).any():
+        col = col.explode()            # [] -> NaN, ignoré par value_counts
+    return col.map(lambda v: json.dumps(v, ensure_ascii=False, sort_keys=True) if isinstance(v, dict) else v)
+
+def _get_decimal_separator()-> str:
     """Initialise la locale et retourne le séparateur décimal (mis en cache)."""
     global _DECIMAL_SEPARATOR
     if _DECIMAL_SEPARATOR is None:

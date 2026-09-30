@@ -16,7 +16,7 @@ class COpenSubtitles:
     def __init__(
         self,
         logger:Logger
-        ):
+        )-> None:
         check_required_env_vars(
             "OpenSubtitles",
             ["OPENSUBTITLES_USER", "OPENSUBTITLES_PASS", "OPENSUBTITLES_API_KEY"],
@@ -33,7 +33,7 @@ class COpenSubtitles:
         self.opensubtitles_client = None
         self._is_logged_in = False
 
-    def _ensure_login(self) -> bool:
+    def _ensure_login(self)-> bool:
         """Connexion paresseuse (lazy initialization) pour éviter de bloquer l'instanciation."""
         if self._is_logged_in and self.opensubtitles_client:
             return True
@@ -58,7 +58,7 @@ class COpenSubtitles:
 
     def get_film_french_subtitles(
         self, tmdb_id: int, name: str, year: int | None = None
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         """Recherche les sous-titres FR pour un film spécifique via son ID TMDB."""
         if not self._ensure_login():
             return pd.DataFrame()
@@ -88,7 +88,7 @@ class COpenSubtitles:
 
     def download_film_subtitle(
         self, path: str, file_id: int | str
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         """Télécharge un sous-titre et le place à côté du fichier média."""
         if not self._ensure_login():
             return pd.DataFrame([{"subtitlePath": "AUTH_ERROR"}])
@@ -106,10 +106,10 @@ class COpenSubtitles:
             file_name = get_file_name_without_extension(path)
 
             # Formatage de nommage conforme (ex: film.fr.srt, film.fr2.srt, etc.)
-            def name_func(i: int, _: str) -> str:
-                return os.path.join(dir_name,f"{file_name}.fr{f'{i+1}' if i > 0 else ''}.srt")
+            def name_func(i: int, _: str)-> str:
+                return os.path.join(dir_name,f"{file_name}.fr.other_{f'{i+1}' if i > 0 else ''}.srt")
 
-            def check_func(f: str | Path) -> bool:
+            def check_func(f: str | Path)-> bool:
                 return not os.path.isfile(f)
 
             moved_files = move_media_file(temp_path, dir_name, name_func, check_func)
@@ -126,7 +126,7 @@ class COpenSubtitles:
 
     def route_get_films_subtitles(
         self, inputFile: str | Path, outputFile: str | Path
-    ) -> bool:
+    )-> bool:
         """Parcourt le CSV d'entrée, cherche les sous-titres pour chaque film et exporte les résultats."""
         df_input = data_frame_from_csv(inputFile, ";")
         if df_input.empty:
@@ -159,7 +159,7 @@ class COpenSubtitles:
 
     def route_download_films_subtitles(
         self, inputFile: str | Path, outputFile: str | Path
-    ) -> bool:
+    )-> bool:
         """Parcourt le CSV d'entrée et télécharge les sous-titres sélectionnés."""
         df_input = data_frame_from_csv(inputFile, ";")
         if df_input.empty:

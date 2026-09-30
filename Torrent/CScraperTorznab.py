@@ -37,7 +37,7 @@ class CScraperTorznab(CCommonTorrent):
         api_key: str | None = None,
         cat: str = "2000,2010,2020,2030,2040,2045,2050,2060",
         max_workers: int = 10
-    ):
+        )-> None:
         raw_url = (
             api_url
             or os.getenv("PROWLARR_API_URL")
@@ -59,10 +59,10 @@ class CScraperTorznab(CCommonTorrent):
         super().__init__(mirrors=[self.api_url],logger=logger)
 
     @property
-    def source_name(self) -> str:
+    def source_name(self)-> str:
         return TorrentSource.TORZNAB.value
 
-    def _build_search_url_for_indexer(self, query: str, indexer_id: int) -> str:
+    def _build_search_url_for_indexer(self, query: str, indexer_id: int)-> str:
         endpoint = f"{self.api_url}/{indexer_id}/api"
         params = {
             "apikey": self.api_key,
@@ -72,7 +72,7 @@ class CScraperTorznab(CCommonTorrent):
         }
         return f"{endpoint}?{urllib.parse.urlencode(params)}"
 
-    def _search_single_indexer(self, query: str, indexer_id: int) -> list[TorrentResult]:
+    def _search_single_indexer(self, query: str, indexer_id: int)-> list[TorrentResult]:
         """Interroge un seul indexeur Prowlarr et formate correctement la taille."""
         url = self._build_search_url_for_indexer(query, indexer_id)
         results: list[TorrentResult] = []
@@ -209,7 +209,7 @@ class CScraperTorznab(CCommonTorrent):
 
         return results
 
-    def search(self, query: str) -> list[TorrentResult]:
+    def search(self, query: str)-> list[TorrentResult]:
         if not self.api_key:
             self.logger.logError(f"[{self.source_name}] Clé API manquante.")
             return []

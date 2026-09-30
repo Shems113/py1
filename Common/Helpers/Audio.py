@@ -31,7 +31,7 @@ MIME_TYPE_TO_VIDEO = {"video/mp4": MP4}
 def extract_mono_16khz_pcm_stream(
     file_path: str | Path,
     logger: Any | None = None
-) -> bytes:
+)-> bytes:
     """Extrait l'audio d'un fichier média sous forme de flux PCM 16-bit 16 kHz Mono en mémoire."""
     path_obj = Path(file_path).resolve()
 
@@ -63,14 +63,14 @@ def extract_mono_16khz_pcm_stream(
             logger.logError(f"Échec de l'extraction audio FFmpeg pour {path_obj.name} : {error_msg}")
         return b""
 
-def get_audio_id3_tags(file_path: str | Path) -> Any:
+def get_audio_id3_tags(file_path: str | Path)-> Any:
     """Extrait les étiquettes ID3/EasyID3 d'un fichier audio."""
     path_str = str(file_path)
     mime = str(mimetypes.guess_type(path_str)[0])
     audio_cls = MIME_TYPE_TO_AUDIO.get(mime)
     return audio_cls(path_str, ID3=EasyID3) if audio_cls else None
 
-def get_audio_tags(file_path: str | Path) -> Any:
+def get_audio_tags(file_path: str | Path)-> Any:
     """Extrait les étiquettes de métadonnées vidéo/audio de base."""
     path_str = str(file_path)
     mime = str(mimetypes.guess_type(path_str)[0])
@@ -80,7 +80,7 @@ def get_audio_tags(file_path: str | Path) -> Any:
 def add_audio_id3_images(
     file_path: str | Path,
     image_data_dico: dict[str | Path, dict[int, str]]
-) -> None:
+)-> None:
     """Ajoute des pochettes (images APIC) dans un fichier MP3/ID3."""
     path_str = str(file_path)
     audio = ID3(path_str)

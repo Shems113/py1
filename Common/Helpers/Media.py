@@ -26,7 +26,7 @@ MIME_TYPE_TO_AUDIO = {
 }
 MIME_TYPE_TO_VIDEO = {"video/mp4": MP4}
 
-def get_ffmpeg_version() -> str:
+def get_ffmpeg_version()-> str:
     """Retourne la première ligne de version de FFmpeg."""
     try:
         res = subprocess.run(
@@ -40,7 +40,7 @@ def get_ffmpeg_version() -> str:
     except (subprocess.SubprocessError, FileNotFoundError):
         return "ffmpeg introuvable dans le PATH"
 
-def ensure_ffmpeg_available(verbose: bool = True) -> str | None:
+def ensure_ffmpeg_available(verbose: bool = True)-> str | None:
     """Vérifie la présence de ffmpeg."""
     ffmpeg_path = shutil.which("ffmpeg")
     if verbose:
@@ -53,21 +53,21 @@ def ensure_ffmpeg_available(verbose: bool = True) -> str | None:
 
 def is_media_type(
     file_path: str | Path,
-    media_type: str) -> bool:
+    media_type: str)-> bool:
     """Vérifie si le type MIME commence par le préfixe spécifié (ex: 'audio', 'video')."""
     mime = mimetypes.guess_type(str(file_path))[0] or ""
     return mime.startswith(media_type)
 
-def is_audio(file_path: str | Path) -> bool:
+def is_audio(file_path: str | Path)-> bool:
     return is_media_type(file_path, "audio")
 
-def is_video(file_path: str | Path) -> bool:
+def is_video(file_path: str | Path)-> bool:
     return is_media_type(file_path, "video")
 
-def is_text_file(file_path: str | Path) -> bool:
+def is_text_file(file_path: str | Path)-> bool:
     return is_media_type(file_path, "text")
 
-def is_media(file_path: str | Path) -> bool:
+def is_media(file_path: str | Path)-> bool:
     return is_audio(file_path) or is_video(file_path) or is_text_file(file_path)
 
 def move_media_file(
@@ -77,7 +77,7 @@ def move_media_file(
     is_same_media_func: Callable[[str | Path], bool],
     default_index: int = 0,
     is_move: bool = True,
-) -> tuple[str, bool]:
+)-> tuple[str, bool]:
     """Déplace ou copie un fichier vers une destination en gérant les collisions."""
     src = Path(source_path)
     target_dir = Path(directory_name)
@@ -104,7 +104,7 @@ def move_media_file(
 def compute_file_hash(
     file_path: str | Path,
     algorithm: str = "sha256"
-) -> str:
+)-> str:
     """Calcule le hash d'un fichier."""
     hasher = hashlib.new(algorithm)
     with open(file_path, "rb") as f:

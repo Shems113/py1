@@ -17,7 +17,7 @@ class CTmdb:
     def __init__(
         self,
         logger:Logger
-        ):
+        )-> None:
         check_required_env_vars("TMDB", ["TMDB_ACCESS_TOKEN"])
         # tmbd_api_key='1fe4af3a73a742bcd684711b0612dcf0'
         tmbd_access_token='eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxZmU0YWYzYTczYTc0MmJjZDY4NDcxMWIwNjEyZGNmMCIsIm5iZiI6MTc1NjUzOTM5NC4yMTgsInN1YiI6IjY4YjJhYTAyYjNiYWZhMTY0MTIwMDM1NyIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.ImX3034tDo2klGFmv-Bv2Ek5BCqTGEgLuq-UqXSTulA'
@@ -35,7 +35,7 @@ class CTmdb:
 
     def search_tmdb_movie(
         self, name: str, year: int | str | None = None, language: str | None = None
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         """Recherche un film sur TMDB (langue originale par défaut)."""
         self.logger.log(f"Recherche du film '{name}' ({year or 'N/A'}) sur TMDB (VO)")
         url = f"{self.tmdb_base_url}/search/movie"
@@ -63,7 +63,7 @@ class CTmdb:
         self,
         movie_id: int,
         language: str | None = None
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         """Recherche des détails pour un film sur TMDB (langue originale par défaut)."""
         print(f"Recherche des détails pour le film '{movie_id}' sur TMDB (VO)")
         url = f"{self.tmdb_base_url}/movie/{movie_id}"
@@ -83,7 +83,7 @@ class CTmdb:
 
     def get_tmdb_movie_alternative_titles(
         self, movie_id: str, country: str | None = None
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         """Recherche des titres alternatifs pour un film sur TMDB (langue originale par défaut)."""
         self.logger.log(f"Recherche des titres alternatifs pour le film '{movie_id}' sur TMDB (VO)")
         url = f"{self.tmdb_base_url}/movie/{movie_id}/alternative_titles"
@@ -107,7 +107,7 @@ class CTmdb:
         year: int | str | None = None,
         cols: list[str] | None = None,
         language: str = "fr-FR",
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         """Recherche une série TV sur TMDB (en Français par défaut)."""
         self.logger.log(f"Recherche de la série '{name}' ({year or 'N/A'}) sur TMDB (FR)")
         url = f"{self.tmdb_base_url}/search/tv"
@@ -141,7 +141,7 @@ class CTmdb:
 
     def get_tmdb_tv_detail(
         self, show_id: int, cols: list[str] | None = None, language: str = "fr-FR"
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         url = f"{self.tmdb_base_url}/tv/{show_id}"
         data = handle_response(
             self.tmdb_session.get(url, params={"language": language})
@@ -167,7 +167,7 @@ class CTmdb:
 
     def get_tmdb_tv_season_detail(
         self, show_id: int, season_number: int, cols: list[str] | None = None, language: str = "fr-FR"
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         url = f"{self.tmdb_base_url}/tv/{show_id}/season/{season_number}"
         data = handle_response(
             self.tmdb_session.get(url, params={"language": language})
@@ -192,7 +192,7 @@ class CTmdb:
 
     # --- Endpoints / Routes Flask ---
 
-    def get_tmdb_token_request(self) -> str:
+    def get_tmdb_token_request(self)-> str:
         """Génère un request token OAuth v3."""
         url = f"{self.tmdb_base_url}/authentication/token/new"
         data = handle_response(self.tmdb_session.get(url)) or {}
@@ -203,7 +203,7 @@ class CTmdb:
 
     def route_search_tmdb_movies(
         self, inputFile: str | Path, outputFile: str | Path
-    ) -> bool:
+    )-> bool:
         """Recherche une liste de films en V.O. depuis un CSV."""
         df_input = data_frame_from_csv(inputFile, ";")
         if df_input.empty:
@@ -235,7 +235,7 @@ class CTmdb:
 
     def route_get_tmdb_movies_alternative_titles(
         self, inputFile: str | Path, outputFile: str | Path
-    ) -> bool:
+    )-> bool:
         """Recherche une liste de titres alternatifs pour des films depuis un CSV."""
         df_input = data_frame_from_csv(inputFile, ";")
         if df_input.empty:
@@ -286,7 +286,7 @@ class CTmdb:
 
     def route_search_tmdb_tv_shows(
         self, inputFile: str | Path, outputFile: str | Path
-    ) -> bool:
+    )-> bool:
         """Recherche une liste de séries en Français depuis un CSV."""
         df_input = data_frame_from_csv(inputFile, ";")
         if df_input.empty:
@@ -318,7 +318,7 @@ class CTmdb:
 
     def route_search_tmdb_tv_episodes(
         self, inputFile: str | Path, outputFile: str | Path
-    ) -> bool:
+    )-> bool:
         """Recherche les séries, leurs détails et l'ensemble de leurs épisodes en Français."""
         df_input = data_frame_from_csv(inputFile, ";")
         if df_input.empty:

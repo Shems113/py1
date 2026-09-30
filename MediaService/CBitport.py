@@ -14,17 +14,15 @@ from Common.Helpers.Web import handle_response
 
 
 class CBitport:
-    def __init__(
+    def __init__( 
         self,
         logger:Logger
-        ):
+        )-> None:
         # Avertissement explicite et immédiat si les credentials sont absents, plutôt
         # que de laisser échouer silencieusement le premier appel API (401/403 opaque).
         # BITPORT_ACCESS_TOKEN n'est volontairement pas listé ici : il peut être obtenu
         # dynamiquement via le flux OAuth (/callback) sans être défini au démarrage.
-        check_required_env_vars(
-            "Bitport", ["BITPORT_CLIENT_ID", "BITPORT_CLIENT_SECRET"]
-        )
+        check_required_env_vars("Bitport", ["BITPORT_CLIENT_ID", "BITPORT_CLIENT_SECRET"])
         bitport_client_id=155811867
         bitport_client_secret='chpff96gnt9nbf74gk'
         bitport_access_token='7d0982d8f7c936136b863572c14be3f3ce2a306c'
@@ -55,7 +53,7 @@ class CBitport:
     def callback_bitport_access_token(
         self,
         code: str
-        ) -> dict[str, Any]:
+        )-> dict[str, Any]:
         """Échange le code reçu lors de la redirection OAuth contre un Access Token et un Refresh Token."""
         url = f"{self.bitport_base_url}/oauth2/access-token"
         payload = {
@@ -81,7 +79,7 @@ class CBitport:
     def refresh_access_token(
         self,
         refresh_token: str
-        ) -> dict[str, Any]:
+        )-> dict[str, Any]:
         """Renouvelle le jeton d'accès sans re-passer par le navigateur."""
         url = f"{self.bitport_base_url}/oauth2/access-token"
         payload = {
@@ -108,7 +106,7 @@ class CBitport:
 
     # --- Endpoints Cloud & Action ---
 
-    def discover_bitport_cloud_folders(self) -> dict[str, Any]:
+    def discover_bitport_cloud_folders(self)-> dict[str, Any]:
         """Récupère l'arborescence complète des dossiers sur Bitport."""
         url = f"{self.bitport_base_url}/cloud/byPath"
         res = self.bitport_session.get(url, params={"scope": "recursive"})
@@ -117,7 +115,7 @@ class CBitport:
     def discover_bitport_cloud_videos(
         self,
         outputFile: str | Path | None = None
-    ) -> dict[str, Any]:
+    )-> dict[str, Any]:
         """Récupère la liste de toutes les vidéos sur le cloud et l'exporte éventuellement en CSV."""
         url = f"{self.bitport_base_url}/cloud/all-videos"
         res = handle_response(self.bitport_session.get(url)) or {}
@@ -136,7 +134,7 @@ class CBitport:
     def create_film_folders_in_bitport(
         self,
         inputFile: str | Path
-        ) -> bool:
+        )-> bool:
         """Crée les dossiers manquants sur Bitport à partir d'un fichier CSV d'entrée."""
         cloud_folders = self.discover_bitport_cloud_folders()
         root_data = next(
@@ -178,7 +176,7 @@ class CBitport:
         self,
         inputFile: str | Path,
         outputFile: str | Path
-    ) -> bool:
+    )-> bool:
         """Sélectionne les meilleurs torrents et lance leurs transferts vers les dossiers Bitport correspondants."""
         df_input = data_frame_from_csv(inputFile, ";")
         df_best = select_best_quality_torrent(df_input)

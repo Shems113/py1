@@ -36,7 +36,8 @@ class CCommonTorrent(ABC):
         self,
         mirrors: list[str],
         logger: Logger,
-        trackers: list[str] | None = None):
+        trackers: list[str] | None = None
+        )-> None:
         self.mirrors = mirrors
         # Liste consolidée de trackers publics haute disponibilité
         self.trackers = trackers or [
@@ -57,14 +58,14 @@ class CCommonTorrent(ABC):
 
     @property
     @abstractmethod
-    def source_name(self) -> str:
+    def source_name(self)-> str:
         """Nom identifiant la source (ex: TorrentSource.YTS.value)."""
 
     @abstractmethod
-    def search(self, query: str) -> list[TorrentResult]:
+    def search(self, query: str)-> list[TorrentResult]:
         """Méthode principale à implémenter pour chaque source."""
 
-    def fetch_html(self, url: str, headers: dict | None = None, timeout: int = 8) -> BeautifulSoup | None:
+    def fetch_html(self, url: str, headers: dict | None = None, timeout: int = 8)-> BeautifulSoup | None:
         """Effectue la requête HTTP et retourne un objet BeautifulSoup."""
         req_headers = {**self.DEFAULT_HEADERS, **(headers or {})}
         try:
@@ -86,7 +87,7 @@ class CCommonTorrent(ABC):
         urls: list[str],
         parse_fn: Callable[[BeautifulSoup, str], list[TorrentResult]],
         headers: dict | None = None,
-    ) -> list[TorrentResult]:
+    )-> list[TorrentResult]:
         """Tente les différents miroirs jusqu'à obtenir des résultats valides."""
         for url in urls:
             soup = self.fetch_html(url, headers=headers)
@@ -98,7 +99,7 @@ class CCommonTorrent(ABC):
         self.logger.log(f"[{self.source_name}] Tous les miroirs ont échoué : {urls}")
         return []
 
-    def get_magnet_from_detail(self, detail_url: str) -> str:
+    def get_magnet_from_detail(self, detail_url: str)-> str:
         """Extrait un lien magnet depuis une page de détail (balise ou regex InfoHash)."""
         soup = self.fetch_html(detail_url, timeout=6)
         if not soup:
@@ -116,7 +117,7 @@ class CCommonTorrent(ABC):
 
         return "N/A"
 
-    def check_health(self, timeout: int = 6) -> dict[str, object]:
+    def check_health(self, timeout: int = 6)-> dict[str, object]:
         """Vérifie l'accessibilité des miroirs de la source."""
         mirrors_status = []
         for mirror in self.mirrors:

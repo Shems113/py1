@@ -7,7 +7,10 @@ from loguru import logger
 
 
 class CLogger:
-    def __init__(self, log_paths: list[str]):
+    def __init__(
+        self,
+        log_paths: list[str]
+        )-> None:
         self.log_paths = log_paths
 
         # Format épuré : Heure | Niveau | Message
@@ -30,17 +33,17 @@ class CLogger:
                 enqueue=True,  # Évite les conflits d'accès concurrents aux fichiers
             )
 
-    def log(self, *values: Any) -> None:
+    def log(self, *values: Any)-> None:
         """Log un message avec le niveau INFO (concatène les arguments par un espace)."""
         message = " ".join(str(v) for v in values)
         logger.info(message)
 
-    def logError(self, *values: Any) -> None:
+    def logError(self, *values: Any)-> None:
         """Log un message avec le niveau ERROR."""
         message = " ".join(str(v) for v in values)
         logger.error(message)
 
-    def log_file_progress(self, index: int, total: int, file_path: str) -> None:
+    def log_file_progress(self, index: int, total: int, file_path: str)-> None:
         """Affiche la progression du traitement des fichiers avec pourcentage."""
         try:
             percent = (index / total) * 100 if total else 0
@@ -48,7 +51,7 @@ class CLogger:
         except Exception:  # noqa: BLE001
             self.log(f"Processed {index}/{total} : {file_path}")
 
-    def logElapsedTime(self, func: Callable[[], Any], func_name: str) -> Any:
+    def logElapsedTime(self, func: Callable[[], Any], func_name: str)-> Any:
         """Mesure et log le temps d'exécution d'une fonction."""
         sep = "-------------------------------------------------------------------"
         self.log(sep)

@@ -14,7 +14,10 @@ from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 
 
 class CScraperLimeTorrents(CCommonTorrent):
-    def __init__(self,logger:Logger):
+    def __init__(
+        self,
+        logger:Logger
+        )-> None:
         mirrors = get_mirrors_from_env(
             "LIMETORRENTS_MIRRORS",
             [
@@ -26,14 +29,14 @@ class CScraperLimeTorrents(CCommonTorrent):
         super().__init__(mirrors,logger=logger)
 
     @property
-    def source_name(self) -> str:
+    def source_name(self)-> str:
         return TorrentSource.LIMETORRENTS.value
 
-    def search(self, query: str, fetch_magnets: bool = True) -> list[TorrentResult]:
+    def search(self, query: str, fetch_magnets: bool = True)-> list[TorrentResult]:
         encoded = urllib.parse.quote(clean_query(query))
         urls = [f"{mirror}/search/all/{encoded}/" for mirror in self.mirrors]
 
-        def _parse(soup: BeautifulSoup, base_url: str) -> list[TorrentResult]:
+        def _parse(soup: BeautifulSoup, base_url: str)-> list[TorrentResult]:
             raw_results = []
             for row in soup.select("table.table2 tr"):
                 if row.find("th"):

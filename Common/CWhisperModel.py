@@ -17,8 +17,8 @@ class CWhisperModel:
         logger: CLogger,
         model_size_or_path: str,
         device: str = "auto",
-        compute_type: str = "default",
-    ) -> None:
+        compute_type: str = "default"
+        )-> None:
         """Initialise le wrapper du modèle Whisper."""
         self.model_size_or_path: str = model_size_or_path
         self.device: str = device
@@ -26,7 +26,7 @@ class CWhisperModel:
         self.logger = logger
         self.lazy_model: CLazy[WhisperModel | None] = CLazy(self._load_model)
 
-    def _load_model(self) -> WhisperModel | None:
+    def _load_model(self)-> WhisperModel | None:
         """Ajuste l'environnement d'exécution et charge le modèle Whisper."""
         if self.device == "auto":
             if IS_LINUX:
@@ -74,7 +74,7 @@ class CWhisperModel:
         voice_activity_detection_filter: bool = True,
         voice_activity_detection_parameters: dict | None = None,
         word_timestamps: bool = True,
-    ) -> list[dict[str, Any]]:
+        )-> list[dict[str, Any]]:
         """Génère les données de transcription à partir d'un fichier audio ou d'un flux numpy."""
 
         model_instance = self.lazy_model.value

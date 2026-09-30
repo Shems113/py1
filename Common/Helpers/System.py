@@ -13,7 +13,7 @@ CPU_COUNT = 7
 def check_required_env_vars(
     service_name: str,
     var_names: list[str]
-    ) -> list[str]:
+    )-> list[str]:
     """Vérifie que les variables d'environnement requises sont bien définies.
 
     Affiche un avertissement si certaines sont manquantes et retourne la liste
@@ -29,7 +29,7 @@ def check_required_env_vars(
 def get_mirrors_from_env(
     env_var: str,
     defaults: list[str]
-    ) -> list[str]:
+    )-> list[str]:
     """Récupère une liste de miroirs depuis une variable d'environnement (séparés par des virgules).
     Si la variable est absente ou vide, retourne la liste de miroirs par défaut.
     """

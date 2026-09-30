@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
+def select_best_quality_torrent(df_torrents: pd.DataFrame)-> pd.DataFrame:
     """Filtre et classe un DataFrame de torrents pour sélectionner la meilleure option par film.
 
     Évalue la résolution (480p à 2160p), convertit la taille en Go et privilégie
@@ -157,12 +157,12 @@ def select_best_quality_torrent(df_torrents: pd.DataFrame) -> pd.DataFrame:
 
     return df_agg[output_cols]
 
-def _concat_unique_data(series: pd.Series) -> str:
+def _concat_unique_data(series: pd.Series)-> str:
     """Concatène les valeurs uniques non nuls d'une série Pandas."""
     unique_vals = series.dropna().unique()
     return " | ".join(str(v) for v in unique_vals if v)
 
-def _extract_magnet_hash(magnet_link: str) -> str | None:
+def _extract_magnet_hash(magnet_link: str)-> str | None:
     """Extrait le Info Hash (BTIH) d'un lien magnet et le met en minuscules."""
     if not isinstance(magnet_link, str):
         return None
@@ -175,13 +175,13 @@ def _extract_magnet_hash(magnet_link: str) -> str | None:
 
 def is_same_magnet(
     link1: str,
-    link2: str) -> bool:
+    link2: str)-> bool:
     """Vérifie si deux liens magnet pointent vers le même torrent."""
     h1 = _extract_magnet_hash(link1)
     h2 = _extract_magnet_hash(link2)
     return h1 is not None and h1 == h2
 
-def parse_quality_torrent(title: str) -> str:
+def parse_quality_torrent(title: str)-> str:
     """Analyse le titre d'une release pour détecter sa qualité ou résolution (ex: 1080p, Bluray, WEB)."""
     patterns = [
         # 1. Résolutions explicites précises (conservées intactes)

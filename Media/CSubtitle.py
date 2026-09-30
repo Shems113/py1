@@ -18,7 +18,7 @@ class CSubtitle(CMedia):
         self,
         json_path: str | Path,
         action_type: EActionType
-    ) -> None:
+        )-> None:
         super().__init__(json_path, EMediaType.Subtitle, action_type)
         self.video = CVideo(self.json_path, self.action_type, EMediaType.Subtitle)
         self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3")
@@ -27,27 +27,27 @@ class CSubtitle(CMedia):
         self.mapping_video_srt_files: dict[Path, list[Path]] = {}
         self.tolerance_seconds = 0.2
 
-    def read(self) -> None:
+    def read(self)-> None:
         """Reads video/audio streams and metadata, exporting them as CSV files."""
         self.video.read()
 
-    def transcribe(self) -> None:
+    def transcribe(self)-> None:
         """Runs parallel transcription of targeted videos, generates .srt files, and exports metadata DataFrames to CSV."""
         if self.is_streaming:
             self.video.transcribe()
         else:
             data = self.process_files_parallel(self._transcribe_video_audio_file_in_subtitle)
-            dfs = self.build_dataframes_by_codec(data, log_message="Transcribed ")
+            dfs = self.build_dataframes_by_codec(data, log_message="Transcribed ", skip_aggregation = True)
             self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
 
-    def transcribeAndCheck(self) -> None:
+    def transcribeAndCheck(self)-> None:
         """Runs parallel transcription and checks synchronization of generated .srt files against existing ones."""
         self.mapping_video_srt_files = self.get_mapping_video_srt_files()
         data = self.process_files_parallel(self._check_cross_lingual_synchronization)
-        dfs = self.build_dataframes_by_codec(data, log_message="Checked ")
+        dfs = self.build_dataframes_by_codec(data, log_message="Checked ", skip_aggregation = True)
         self.export_dataframes_to_csv_by_codec(dfs)
 
-    def get_mapping_video_srt_files(self) -> dict[Path, list[Path]]:
+    def get_mapping_video_srt_files(self)-> dict[Path, list[Path]]:
         """Returns the mapping of video files to their corresponding .srt files."""
         df = data_frame_from_csv(self.other_source_path, self.data_separator)
 
@@ -59,7 +59,7 @@ class CSubtitle(CMedia):
     def _transcribe_video_audio_file_in_subtitle(
         self,
         file_path: str | Path
-        ) -> dict[str, list[dict[str, typing.Any]]]:
+        )-> dict[str, list[dict[str, typing.Any]]]:
         """Transcribes an individual video or audio file, generates its .srt file, and extracts attributes."""
         path_obj = Path(file_path)
         result: dict[str, list[dict[str, typing.Any]]] = {}
@@ -85,7 +85,7 @@ class CSubtitle(CMedia):
     def _check_cross_lingual_synchronization(
         self,
         file_path: Path
-    ) -> dict[str, list[dict[str, typing.Any]]]:
+    )-> dict[str, list[dict[str, typing.Any]]]:
         """
         Checks synchronization between a foreign language video and French SRT files
         by comparing VAD speech intervals against subtitle timestamps.

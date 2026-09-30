@@ -14,19 +14,19 @@ WORD_FORMAT_EXTENSIONS = {
 
 HASH_ALGOS = ["md5"]
 
-def clean_directory_name(dir_name: str) -> str:
+def clean_directory_name(dir_name: str)-> str:
     return re.sub(r'[<>:"/\\|?*]', " ", dir_name).strip()
 
-def clean_last_directory_name(dir_name: str) -> str:
+def clean_last_directory_name(dir_name: str)-> str:
     result = clean_directory_name(dir_name).strip()
     while result.endswith("."):
         result = result[:-1]
     return result
 
-def clean_file_name(file_name: str) -> str:
+def clean_file_name(file_name: str)-> str:
     return re.sub(r'[<>:"/\\|?*]', "_", file_name).strip()
 
-def remove_empty_folders(path_directory: str | Path) -> None:
+def remove_empty_folders(path_directory: str | Path)-> None:
     """Parcourt et supprime récursivement les dossiers vides."""
     path_obj = Path(path_directory)
     if not path_obj.exists():
@@ -41,25 +41,25 @@ def remove_empty_folders(path_directory: str | Path) -> None:
             except OSError:
                 pass
 
-def get_folder_name(file_path: str | Path) -> str:
+def get_folder_name(file_path: str | Path)-> str:
     return str(Path(file_path).parent)
 
-def get_folder_names(file_path: str | Path) -> str:
+def get_folder_names(file_path: str | Path)-> str:
     return Path(file_path).parent.name
 
-def get_file_name_with_extension(file_path: str | Path) -> str:
+def get_file_name_with_extension(file_path: str | Path)-> str:
     return Path(file_path).name
 
-def get_file_name_without_extension(file_path: str | Path) -> str:
+def get_file_name_without_extension(file_path: str | Path)-> str:
     return Path(file_path).stem
 
-def get_file_name_extension(file_path: str | Path) -> str:
+def get_file_name_extension(file_path: str | Path)-> str:
     return Path(file_path).suffix.lower()
 
 def get_target_filename_for_word(
     file_path: str | Path,
     file_format: int | None
-) -> str | None:
+)-> str | None:
     """Génère le nom de fichier cible selon le format Word exporté."""
     path_obj = Path(file_path)
     if file_format not in WORD_FORMAT_EXTENSIONS:
@@ -71,7 +71,7 @@ def get_target_filename_for_word(
 def compute_file_hash(
     file_path: str | Path,
     algorithm: str = "sha256"
-) -> str:
+)-> str:
     """Calcule le hash d'un fichier."""
     hasher = hashlib.new(algorithm)
     with open(file_path, "rb") as f:
@@ -82,7 +82,7 @@ def compute_file_hash(
 def get_file_common_fields(
     file_path: str | Path,
     include_all_data: bool = False
-) -> dict[str, Any]:
+)-> dict[str, Any]:
     """Extrait les métadonnées de base d'un fichier."""
     path_obj = Path(file_path)
     stats = path_obj.stat()

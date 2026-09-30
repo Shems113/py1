@@ -2,7 +2,7 @@ import re
 import urllib.parse
 
 
-def parse_size(text: str) -> str:
+def parse_size(text: str)-> str:
     """Extrait et normalise la taille d'un fichier depuis du texte brut HTML.
 
     Gère les suffixes d'unités (KB, MB, GB, TiB...) et les préfixes de mots-clés (Size, Taille).
@@ -38,7 +38,7 @@ def extract_magnet_from_html(
     html_str: str,
     title: str = "",
     trackers: list[str] | None = None
-    ) -> str:
+    )-> str:
     """Recherche un InfoHash ou un hash hexadécimal dans du code HTML et reconstruit un lien magnet complet."""
     trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in (trackers or []))
     title_str = f"&dn={urllib.parse.quote(title)}" if title else ""
@@ -57,7 +57,7 @@ def extract_magnet_from_html(
 
     return "N/A"
 
-def parse_int(value: str) -> int:
+def parse_int(value: str)-> int:
     """Extrait un entier depuis une chaîne (ex: '1 250 seeds' -> 1250).
 
     Retourne 0 si l'extraction échoue.
@@ -67,7 +67,7 @@ def parse_int(value: str) -> int:
     except (ValueError, TypeError):
         return 0
 
-def parse_tpb_date(text: str) -> str:
+def parse_tpb_date(text: str)-> str:
     """Extrait la date de publication spécifique aux éléments de The Pirate Bay."""
     match = re.search(r"Uploaded\s+([\d\-\:\s\w]+?),", text, re.IGNORECASE)
     return match.group(1).strip() if match else "N/A"

@@ -9,6 +9,7 @@ from Common.EEnums import ETorrentSource as TorrentSource
 from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
 from Common.Helpers.Torrent import select_best_quality_torrent
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
+from Torrent.CFreeboxDownloader import CFreeboxDownloader
 from Torrent.CScraperLimeTorrents import CScraperLimeTorrents
 from Torrent.CScraperThePirateBay import CScraperThePirateBay
 from Torrent.CScraperTorznab import CScraperTorznab
@@ -19,7 +20,8 @@ from Torrent.CTorrentDownloader import CTorrentDownloader
 class CTorrentManager:
     def __init__(
         self,
-        logsPath:Path|str):
+        logsPath:Path|str
+        )-> None:
         # Enregistrement dynamique de l'ensemble des scrapers
         self.logger = Logger([str(logsPath)])
         self.scrapers: dict[TorrentSource, CCommonTorrent] = {
@@ -32,7 +34,7 @@ class CTorrentManager:
     def check_sources_health(
         self,
         timeout: int = 6
-        ) -> dict[str, dict[str, object]]:
+        )-> dict[str, dict[str, object]]:
         """Contrôle l'état de santé de l'ensemble des sources enregistrées."""
         results = {}
         with ThreadPoolExecutor(max_workers=len(self.scrapers)) as executor:
@@ -56,8 +58,8 @@ class CTorrentManager:
         sources: TorrentSource | list[TorrentSource] = TorrentSource.ALL,
         export_csv: bool = False,
         csv_path: str | Path | None = None,
-        max_workers: int = 5,
-    ) -> pd.DataFrame:
+        max_workers: int = 5
+        )-> pd.DataFrame:
         """Lance une recherche parallélisée sur les sources sélectionnées."""
         if isinstance(sources, TorrentSource):
             selected = list(self.scrapers.keys()) if sources == TorrentSource.ALL else [sources]
@@ -96,8 +98,8 @@ class CTorrentManager:
     def search_film_torrent(
         self,
         name: str,
-       year: int | str | None = None
-       ) -> pd.DataFrame:
+        year: int | str | None = None
+        )-> pd.DataFrame:
         """Formate la requête puis recherche sur l'ensemble des sources."""
         str_year = str(year).strip() if year is not None and str(year).strip().isdigit() else ""
         query = f"{name.strip()} {str_year}".strip()
@@ -113,7 +115,7 @@ class CTorrentManager:
         tmdb_id: int,
         name: str,
         year: int | str | None = None
-        ) -> pd.DataFrame:
+        )-> pd.DataFrame:
         """Tente une recherche avec l'année puis retente sans l'année en cas d'échec."""
         for y in [year, None]:
             df = self.search_film_torrent(name, y)
@@ -127,7 +129,7 @@ class CTorrentManager:
         input_file: str | Path,
         output_file: str | Path,
         max_workers: int = 4
-       ) -> bool:
+        )-> bool:
         """Traite une liste de films issue d'un fichier CSV en parallèle."""
         df_input = data_frame_from_csv(input_file, ";")
         if df_input.empty:
@@ -163,8 +165,23 @@ class CTorrentManager:
         self,
         input_file: str | Path,
         output_file: str | Path
-    ) -> bool:
-        """Sélectionne les meilleurs torrents et lance leurs transferts via CTorrentDownloader."""
+        )-> bool:
+        return self._download_films_from_magnets(input_file,output_file,False)
+    
+    def route_download_films_from_freebox(
+        self,
+        input_file: str | Path,
+        output_file: str | Path
+        )-> bool:
+        return self._download_films_from_magnets(input_file,output_file,True)    
+            
+    def _download_films_from_magnets(
+        self,
+        input_file: str | Path,
+        output_file: str | Path,
+        is_from_freebox: bool
+        )-> bool:
+        """Sélectionne les meilleurs torrents et lance leurs transferts via CTorrentDownloader ou la Freebox."""
         df_input = data_frame_from_csv(input_file, ";")
         df_best = select_best_quality_torrent(df_input)
 
@@ -195,11 +212,11 @@ class CTorrentManager:
             return False
 
         # Lancement du téléchargement
-        downloader = CTorrentDownloader(
+        downloader = (CFreeboxDownloader if is_from_freebox else CTorrentDownloader) (
             magnet_data=magnet_data,
             output_dir=r"C:\Users\SEDOUD\Videos\New\Torrent"
         )
-
+        
         try:
             downloader.download_from_magnets()
         except KeyboardInterrupt:
@@ -210,7 +227,6 @@ class CTorrentManager:
             return False
 
         return True
-
 
 if __name__ == "__main__":
     manager = CTorrentManager("")

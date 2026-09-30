@@ -41,11 +41,11 @@ class CGmail(CMedia):
         self,
         json_path: str | Path,
         action_type: EActionType
-    ) -> None:
+        )-> None:
         super().__init__(json_path, EMediaType.Gmail, action_type)
         self.gmail_api_service: Resource | None = self._call_gmail_api_service()
 
-    def _call_gmail_api_service(self) -> Resource | None:
+    def _call_gmail_api_service(self)-> Resource | None:
         """Authentifie l'utilisateur et initialise le service de l'API Gmail."""
         if not self.source_path or not self.source_path.is_file():
             self.logger.logError(
@@ -84,7 +84,7 @@ class CGmail(CMedia):
             )
             return None
 
-    def read(self) -> None:
+    def read(self)-> None:
         """Lit les informations de base Gmail (labels, messages) et les exporte sous forme de CSV."""
         if not self.target_path:
             self.logger.log(
@@ -95,7 +95,7 @@ class CGmail(CMedia):
         dfs = self._build_dataframes()
         self.export_dataframes_to_csv_by_codec(dfs)
 
-    def _build_dataframes(self) -> dict[str, pd.DataFrame]:
+    def _build_dataframes(self)-> dict[str, pd.DataFrame]:
         """Construit les DataFrames résumant les labels et la liste des messages."""
         results = {}
         for data_type, func in [("gmailLabel",self._list_labels), ("gmailMessage", self._list_messages)]:
@@ -110,7 +110,7 @@ class CGmail(CMedia):
 
         return results
 
-    def _list_labels(self) -> pd.DataFrame:
+    def _list_labels(self)-> pd.DataFrame:
         """Récupère la liste des étiquettes (labels) de l'utilisateur."""
         if not self.gmail_api_service:
             return pd.DataFrame()
@@ -126,7 +126,7 @@ class CGmail(CMedia):
     def _list_messages(
         self,
         label_ids: list[str] | None = None
-    ) -> pd.DataFrame:
+    )-> pd.DataFrame:
         """Récupère la liste complète des messages correspondant au motif avec pagination."""
         if not self.gmail_api_service:
             return pd.DataFrame()
@@ -156,7 +156,7 @@ class CGmail(CMedia):
 
         return pd.DataFrame(messages)
 
-    def write(self) -> None:
+    def write(self)-> None:
         """Récupère les détails avancés des messages (ainsi que leurs pièces jointes) et les exporte."""
         if not self.other_source_path or not self.other_source_path.is_file():
             self.logger.log(
@@ -172,7 +172,7 @@ class CGmail(CMedia):
         for key, df in self._build_dataframes_details(df_source).items():
             csv_path = target_dir / f"{key}.csv"
 
-            def export_csv() -> None:
+            def export_csv()-> None:
                 data_frame_to_csv(df, csv_path, self.data_separator)  # noqa: B023
 
             self.logger.logElapsedTime(export_csv, f"Display {key}")
@@ -180,7 +180,7 @@ class CGmail(CMedia):
     def _build_dataframes_details(
         self,
         df_source: pd.DataFrame
-    ) -> dict[str, pd.DataFrame]:
+    )-> dict[str, pd.DataFrame]:
         """Extrait les détails et pièces jointes de chaque message identifié."""
         if df_source.empty or "id" not in df_source.columns:
             return {"gmailMessageDetailsResult": pd.DataFrame()}
@@ -196,7 +196,7 @@ class CGmail(CMedia):
                     f"An error occurred with message Id {message_id} : {e}"
                 )
 
-        def process_details_df() -> pd.DataFrame:
+        def process_details_df()-> pd.DataFrame:
             df = pd.DataFrame(message_details)
             if df.empty:
                 return df
@@ -223,7 +223,7 @@ class CGmail(CMedia):
     def _get_message_details(
         self,
         message_id: str
-        ) -> dict[str, typing.Any]:
+        )-> dict[str, typing.Any]:
         """Récupère le détail complet d'un message donné via son identifiant."""
         if not self.gmail_api_service:
             return {}
@@ -269,14 +269,14 @@ class CGmail(CMedia):
         from_email: str,
         to_email: str,
         parts: list[dict[str, typing.Any]],
-    ) -> list[str]:
+    )-> list[str]:
         """Télécharge et enregistre localement les pièces jointes associées à un message."""
         if not self.gmail_api_service:
             return []
 
         saved_file_paths = []
 
-        def extract_parts(parts_list: list[dict[str, typing.Any]]) -> list[dict[str, typing.Any]]:
+        def extract_parts(parts_list: list[dict[str, typing.Any]])-> list[dict[str, typing.Any]]:
             """Extrait récursivement toutes les pièces jointes imbriquées."""
             extracted = []
             for part in parts_list:

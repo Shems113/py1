@@ -15,7 +15,7 @@ CHUNK_SIZE = 1024 * 1024  # 1 Mo
 FINISHED_STATUSES = {"done", "seeding", "error"}
 
 
-def _b64(path: str) -> str:
+def _b64(path: str)-> str:
     """L'API Freebox attend les chemins encodés en base64."""
     return base64.b64encode(path.encode("utf-8")).decode("ascii")
 
@@ -26,20 +26,21 @@ class CFreeboxDownloader:
     def __init__(
         self,
         magnet_data: dict[str, str | int] | None = None,
-        output_dir: str = "/Freebox/Téléchargements") -> None:
+        output_dir: str = "/Freebox/Téléchargements"
+        )-> None:
         self.magnet_data = magnet_data or {}
         self.base_save_path = output_dir.rstrip("/")
         self.video_extensions = get_video_extensions()
         self.base_url, self.session_token = connect()
 
-    def _api(self, method: str, path: str, **kwargs: Any) -> Any:
+    def _api(self, method: str, path: str, **kwargs: Any)-> Any:
         return call(method, f"{self.base_url}{path}", self.session_token, **kwargs)
 
-    def _fetch_downloads(self) -> dict[int, dict[str, Any]]:
+    def _fetch_downloads(self)-> dict[int, dict[str, Any]]:
         """Toutes les tâches du gestionnaire de téléchargements, indexées par id."""
         return {d["id"]: d for d in self._api("GET", "/downloads/") or []}
 
-    def _select_downloads(self, include_finished: bool) -> list[dict[str, Any]]:
+    def _select_downloads(self, include_finished: bool)-> list[dict[str, Any]]:
         """Tâches brutes de la box, par défaut uniquement celles en cours."""
         return [
             t for t in self._fetch_downloads().values()
@@ -47,11 +48,11 @@ class CFreeboxDownloader:
         ]
 
     @staticmethod
-    def _folder(task: dict[str, Any]) -> str:
+    def _folder(task: dict[str, Any])-> str:
         """Dossier de destination d'une tâche sur la box (décodé du base64)."""
         return base64.b64decode(task.get("download_dir", "")).decode("utf-8")
 
-    def get_downloads(self, include_finished: bool = False) -> list[dict[str, Any]]:
+    def get_downloads(self, include_finished: bool = False)-> list[dict[str, Any]]:
         """État des téléchargements de la Freebox (par défaut, uniquement ceux en cours)."""
         return [
             {
@@ -69,7 +70,7 @@ class CFreeboxDownloader:
             for t in self._select_downloads(include_finished)
         ]
 
-    def print_downloads(self, include_finished: bool = False) -> None:
+    def print_downloads(self, include_finished: bool = False)-> None:
         """Affiche en console les téléchargements de la Freebox (par défaut, ceux en cours)."""
         downloads = self._select_downloads(include_finished)
         if not downloads:
@@ -85,7 +86,7 @@ class CFreeboxDownloader:
     # ------------------------------------------------------------------ #
     # Rapatriement des fichiers de la Freebox vers la machine locale
     # ------------------------------------------------------------------ #
-    def _list_files(self, folder: str, relative: str = "") -> list[tuple[str, dict[str, Any]]]:
+    def _list_files(self, folder: str, relative: str = "")-> list[tuple[str, dict[str, Any]]]:
         """Fichiers d'un dossier de la box (sous-dossiers compris) : [(chemin relatif, infos)]."""
         files = []
         for entry in self._api("GET", f"/fs/ls/{_b64(folder)}", params={"removeHidden": 1}) or []:
@@ -98,7 +99,7 @@ class CFreeboxDownloader:
                 files.append((rel, entry))
         return files
 
-    def _download_file(self, remote_path_b64: str, size: int, dest: Path) -> None:
+    def _download_file(self, remote_path_b64: str, size: int, dest: Path)-> None:
         """Télécharge un fichier de la box, avec reprise si un fichier partiel existe déjà."""
         done = dest.stat().st_size if dest.exists() else 0
         if done >= size:
@@ -124,7 +125,7 @@ class CFreeboxDownloader:
                     sys.stdout.flush()
         print()
 
-    def fetch_task(self, task_id: int, local_dir: Path | str, video_only: bool = True) -> Path:
+    def fetch_task(self, task_id: int, local_dir: Path | str, video_only: bool = True)-> Path:
         """Rapatrie sur cette machine les fichiers d'un téléchargement de la box.
 
         Recrée le sous-dossier de la tâche (ex. « SAINT SEIYA ») dans local_dir.
@@ -142,7 +143,7 @@ class CFreeboxDownloader:
             self._download_file(entry["path"], entry["size"], target / rel)
         return target
 
-    def _add_magnets(self) -> dict[int, str]:
+    def _add_magnets(self)-> dict[int, str]:
         """Ajoute les magnets, chacun dans un sous-dossier nommé par son ID. Renvoie {id tâche: id film}."""
         tasks = {}
         print(f"Ajout de {len(self.magnet_data)} magnet(s) à la Freebox...")
@@ -161,14 +162,14 @@ class CFreeboxDownloader:
 
         return tasks
 
-    def _apply_video_filter(self, task_id: int) -> None:
+    def _apply_video_filter(self, task_id: int)-> None:
         """Active uniquement le téléchargement des fichiers vidéo."""
         for file in self._api("GET", f"/downloads/{task_id}/files") or []:
             if PurePosixPath(file["name"]).suffix.lower() not in self.video_extensions:
                 self._api("PUT", f"/downloads/{task_id}/files/{file['id']}", json={"priority": "no_dl"})
 
     @staticmethod
-    def _format_status(i: int, movie_id: str, task: dict[str, Any]) -> str:
+    def _format_status(i: int, movie_id: str, task: dict[str, Any])-> str:
         """Ligne de suivi d'une tâche."""
         prefix = f"[{i}] [{movie_id}]"
         if not task:
@@ -184,7 +185,7 @@ class CFreeboxDownloader:
         return (f"{prefix} {task['name'][:25]:<25} | {progress:6.2f}% | DL: {dl_speed:7.1f} Ko/s "
                 f"| ETA: {eta // 3600}h{eta % 3600 // 60:02d}")
 
-    def download_from_magnets(self, local_dir: Path | str | None = None) -> None:
+    def download_from_magnets(self, local_dir: Path | str | None = None)-> None:
         """Boucle principale de suivi des téléchargements.
 
         Si local_dir est fourni, les fichiers terminés sont ensuite rapatriés sur cette machine.
