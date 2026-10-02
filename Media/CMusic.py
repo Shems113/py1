@@ -1,59 +1,49 @@
-import typing
+import functools
+import re
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
-import pandas as pd
-
+from Common.CLazy import CLazy
 from Common.CMusicAutotag import CMusicAutotag
 from Common.EEnums import EActionType, EMediaType
-from Common.Helpers.Audio import (
-    add_audio_id3_images,
-    get_audio_id3_tags,
-)
-from Common.Helpers.Dataframe import (
-    data_frame_from_csv,
-    data_frame_to_csv,
-)
+from Common.Helpers.Audio import add_audio_id3_images, get_audio_id3_tags
+from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
 from Common.Helpers.File import (
     clean_file_name,
     clean_last_directory_name,
     get_file_common_fields,
-    get_file_name_extension,
 )
-from Common.Helpers.Media import (
-    is_audio,
-    move_media_file,
-)
-from Media.CMedia import CMedia
+from Common.Helpers.Media import is_audio
+from Media.CMedia import CMedia, FileAttributes
 
 
 class CMusic(CMedia):
     def __init__(
-        self,   
+        self,
         json_path: str | Path,
         action_type: EActionType
         )-> None:
-        self.music_auto_tag = CMusicAutotag("aw7C9JmtuM",contact="mohamed.sedoud@gmail.com")
         super().__init__(json_path, EMediaType.Music, action_type)
+        # Créé au premier usage : l'action Write n'en a pas besoin (ni de fpcalc)
+        # (clé AcoustID et URL des API : Files/ExternalApiSettings.json)
+        self.music_auto_tag: CLazy[CMusicAutotag] = CLazy(CMusicAutotag)
 
     def read(self)-> None:
         """Lit les fichiers audio sources et exporte les analyses en CSV."""
         if not self.other_source_path:
-            self.logger.log(
-                "Warning: other_source_path non défini pour le stockage des CSV."
-            )
+            self.logger.log("Warning: other_source_path non défini pour le stockage des CSV.")
             return
 
         data = self.process_files_parallel(self._get_music_attributes_fields)
-        dfs = self.build_dataframes_by_codec(data)
-        self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
+        self.export_dataframes_to_csv_by_codec(self.build_dataframes_by_codec(data), is_other_source=True)
         self.remove_empty_folders()
 
     def _get_music_attributes_fields(
         self,
         file_path: str | Path
-    )-> dict[str, list[dict[str, typing.Any]]]:
-        """Extrait les tags et déplace/copie le fichier si configuré."""
+    )-> FileAttributes:
+        """Extrait les tags, les tags trouvés en ligne et déplace/copie le fichier si configuré."""
         path_obj = Path(file_path)
         self.logger.log(f"Get music attributes fields of {path_obj}")
 
@@ -62,75 +52,22 @@ class CMusic(CMedia):
 
         try:
             audio = get_audio_id3_tags(path_obj)
-            target_file_path = path_obj
+            if audio is None:
+                raise ValueError("format audio non reconnu par mutagen")
 
-            # Traitement du déplacement ou de la copie si demandé
-            if self.action_type in (
-                EActionType.ReadAndMove,
-                EActionType.ReadAndCopy,
-            ):
-                if not self.target_path:
-                    raise ValueError(
-                        "target_path non défini pour le déplacement/copie"
-                    )
+            if self.is_move_or_copy:
+                path_obj = self._move_or_copy_by_album(path_obj, audio)
 
-                is_move = self.action_type == EActionType.ReadAndMove
-                extension = get_file_name_extension(path_obj)
+            common_fields = get_file_common_fields(path_obj, False)
+            music_auto_tags, is_ok = self.logger.log_elapsed_time(
+                lambda: self.music_auto_tag.value.get_tags(str(path_obj)),
+                f"Get auto tags of {path_obj}",
+            )
+            if not is_ok:
+                self.logger.log_error(f"Failed to get auto tags of {path_obj}")
 
-                artist = audio.get("albumartist", ["UNKNOWN"])[0]
-                default_album = self.item.get("AlbumDefaultName", "{}").format(
-                    artist
-                )
-                album = audio.get("album", [default_album])[0]
-                index = audio.get("tracknumber", [1])[0]
-
-                target_dir = (
-                    self.target_path
-                    / extension.replace(".", "")
-                    / clean_last_directory_name(artist.upper())
-                    / clean_last_directory_name(album.upper())
-                )
-
-                def file_name_func(idx: int, suffix: str)-> str:
-                    prefix = f"{idx}{suffix}" if idx != 0 else ""
-                    title = clean_file_name(audio.get("title", [""])[0])
-                    return str(target_dir / f"{prefix}{title}{extension}")
-
-                def is_same_media_func(other_file: str | Path)-> bool:
-                    other_path = Path(other_file)
-                    if not other_path.is_file():
-                        return False
-                    other_audio = get_audio_id3_tags(other_path)
-                    return all(
-                        audio.get(k) == other_audio.get(k) for k in audio
-                    )
-
-                move_result = move_media_file(
-                    path_obj,
-                    target_dir,
-                    file_name_func,
-                    is_same_media_func,
-                    index,
-                    is_move,
-                )
-
-                target_file_path = Path(move_result[0])
-                if move_result[1]:
-                    action_str = "Move" if is_move else "Copy"
-                    self.logger.log(
-                        f"{action_str} {path_obj} to {target_file_path}"
-                    )
-
-            common_fields = get_file_common_fields(target_file_path, False)
-
-            music_auto_tags = self.logger.log_elapsed_time(
-                    lambda : self.music_auto_tag.get_tags(target_file_path),
-                    f"Get auto tags of {target_file_path}",
-                )
-            # Formatage des données de tags
             music_tags = {k: "|".join(map(str, v)) for k, v in audio.items()}
             other_info = vars(audio.info) if hasattr(audio, "info") else {}
-
             return {
                 "music": [common_fields | music_tags],
                 "musicAutoTag": [music_auto_tags],
@@ -138,80 +75,46 @@ class CMusic(CMedia):
             }
 
         except Exception as e:  # noqa: BLE001
-            self.logger.log_error(
-                f"Error with {file_path} : failed to get fields ({e})"
-            )
+            self.logger.log_error(f"Error with {file_path} : failed to get fields ({e})")
             return {}
+
+    def _move_or_copy_by_album(self, path_obj: Path, audio: Any)-> Path:
+        """Range le fichier dans <cible>/<ext>/<ARTISTE>/<ALBUM>/<titre>.<ext> ; un fichier
+        aux tags identiques n'est pas recopié, un homonyme différent reçoit un préfixe."""
+        if not self.target_path:
+            raise ValueError("target_path non défini pour le déplacement/copie")
+
+        extension = path_obj.suffix.lower()
+        artist = audio.get("albumartist", ["UNKNOWN"])[0]
+        default_album = self.item.get("AlbumDefaultName", "{}").format(artist)
+        album = audio.get("album", [default_album])[0]
+        # « 3/11 » -> 3 (l'ancien code passait la chaîne brute, qui plantait en cas de collision)
+        track = re.match(r"\d+", str(audio.get("tracknumber", ["1"])[0]))
+        index = int(track.group()) if track else 1
+
+        target_dir = (
+            self.target_path
+            / extension.lstrip(".")
+            / clean_last_directory_name(artist.upper())
+            / clean_last_directory_name(album.upper())
+        )
+        title = clean_file_name(audio.get("title", [""])[0])
+
+        def file_name_func(idx: int, separator: str)-> str:
+            prefix = f"{idx}{separator}" if idx != 0 else ""
+            return str(target_dir / f"{prefix}{title}{extension}")
+
+        def is_same_media_func(other_file: str | Path)-> bool:
+            other_path = Path(other_file)
+            other_audio = get_audio_id3_tags(other_path) if other_path.is_file() else None
+            return other_audio is not None and all(audio.get(k) == other_audio.get(k) for k in audio)
+
+        return self._move_or_copy(path_obj, target_dir, file_name_func, is_same_media_func, index)
 
     def write(self)-> None:
         """Met à jour les tags texte et images des fichiers audio."""
-        self._write_audio_fields()
+        self._write_tags_from_csv(allow_video=False)
         self._write_audio_images()
-
-    def _write_audio_fields(self)-> None:
-        """Édite les métadonnées texte ID3 à partir de la source CSV."""
-        if not self.source_path:
-            return
-
-        df = data_frame_from_csv(self.source_path, self.data_separator)
-
-        if df.empty or "path" not in df.columns:
-            return
-
-        media_fields = [col for col in df.columns if col != "path"]
-        rows_to_drop = []
-
-        for row in df.itertuples():
-            file_path = row.path
-            fields_data = {
-                col: getattr(row, col)
-                for col in media_fields
-                if pd.notna(getattr(row, col))
-            }
-
-            def edit_task()-> bool:
-                return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
-
-            log_msg = f"Edit {file_path} with fields {media_fields}"
-            if self.logger.log_elapsed_time(edit_task, log_msg):
-                rows_to_drop.append(row.Index)
-
-        if rows_to_drop:
-            df = df.drop(index=rows_to_drop)
-
-        data_frame_to_csv(df, self.source_path, self.data_separator)
-
-    def _edit_audio_fields(
-        self,
-        file_path: str | Path,
-        fields: dict[str, typing.Any]
-    )-> bool:
-        """Modifie les champs ID3 d'un fichier audio spécifique."""
-        path_obj = Path(file_path)
-        if not is_audio(path_obj):
-            return False
-
-        try:
-            audio = get_audio_id3_tags(path_obj)
-            updates = {}
-
-            for key, value in fields.items():
-                current_val = audio.get(key, [None])[0]
-                str_value = str(value)
-                if str_value != current_val:
-                    updates[key] = str_value.split("@")
-
-            if updates:
-                audio.update(updates)
-                audio.save(path_obj)
-                self.logger.log(f"Update {path_obj} tags with {updates}")
-            return True
-
-        except Exception as e:  # noqa: BLE001
-            self.logger.log(
-                f"Error with {path_obj} : failed to edit tags ({e})"
-            )
-            return False
 
     def _write_audio_images(self)-> None:
         """Insère les pochettes/images dans les métadonnées ID3 des fichiers audio."""
@@ -220,41 +123,26 @@ class CMusic(CMedia):
 
         other_source = self.other_source_path
         df = data_frame_from_csv(other_source, self.data_separator)
-
         if df.empty:
             return
 
-        # Restructuration des images par fichier
-        image_mapping: dict[
-            str, dict[str, dict[str, str]]
-        ] = defaultdict(lambda: defaultdict(dict))
+        # Restructuration des images par fichier : {fichier: {image: {type: description}}}
+        image_mapping: dict[str, dict[str | Path, dict[int, str]]] = defaultdict(lambda: defaultdict(dict))
         for row in df.itertuples(index=False):
-            image_mapping[row.path][row.imagePath][row.imageType] = (
-                row.imageDescription
-            )
+            image_mapping[row.path][row.imagePath][int(row.imageType)] = row.imageDescription
 
         paths_to_remove = []
-
         for file_path, images_config in image_mapping.items():
             path_obj = Path(file_path)
             if not is_audio(path_obj):
                 continue
-
-            def add_images_task()-> None:
-                add_audio_id3_images(path_obj, images_config)  # noqa: B023
-
             try:
                 self.logger.log_elapsed_time(
-                    add_images_task,
+                    functools.partial(add_audio_id3_images, path_obj, images_config),
                     f"Add images to {path_obj} with {images_config}",
                 )
                 paths_to_remove.append(file_path)
             except Exception as e:  # noqa: BLE001
-                self.logger.log(
-                    f"Error with {path_obj} : failed to add image {images_config} ({e})"
-                )
+                self.logger.log_error(f"Error with {path_obj} : failed to add image {images_config} ({e})")
 
-        if paths_to_remove:
-            df = df[~df["path"].isin(paths_to_remove)]
-
-        data_frame_to_csv(df, other_source, self.data_separator)
+        data_frame_to_csv(df[~df["path"].isin(paths_to_remove)], other_source, self.data_separator)

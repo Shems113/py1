@@ -1,4 +1,5 @@
 import base64
+import functools
 import json
 import typing
 from collections import defaultdict
@@ -13,11 +14,12 @@ from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
 
 from Common.EEnums import EActionType, EMediaType
+from Common.Helpers.ApiSettings import get_api_settings, update_api_settings
 from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
-from Common.Helpers.File import clean_file_name, get_file_name_extension
-from Common.Helpers.Json import (
-    json_from_file,
-    json_to_file,
+from Common.Helpers.File import (
+    clean_file_name,
+    clean_last_directory_name,
+    get_file_name_extension,
 )
 from Media.CMedia import CMedia
 
@@ -25,7 +27,9 @@ from Media.CMedia import CMedia
 class CGmail(CMedia):
     USER_ID = "me"
     LIST_MESSAGE_MAX_RESULTS = 500
-    SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]  # noqa: RUF012
+    # Messages récupérés par requête groupée (batch) : Gmail accepte 100, mais au-delà
+    # de ~50 il renvoie souvent des erreurs 429 (trop de requêtes simultanées)
+    BATCH_SIZE = 50
     MESSAGE_HEADERS = [  # noqa: RUF012
         "Date",
         "From",
@@ -47,33 +51,28 @@ class CGmail(CMedia):
 
     def _call_gmail_api_service(self)-> Resource | None:
         """Authentifie l'utilisateur et initialise le service de l'API Gmail."""
-        if not self.source_path or not self.source_path.is_file():
-            self.logger.log_error(
-                "Error: source_path invalide pour la configuration Gmail API."
-            )
+        # Identifiants OAuth, jeton et scopes : section « Gmail » de Files/ExternalApiSettings.json
+        try:
+            gmail_settings = get_api_settings("Gmail")
+        except (FileNotFoundError, KeyError) as e:
+            self.logger.log_error(f"Error: configuration Gmail API introuvable ({e})")
             return None
 
-        json_gmail_settings = json_from_file(self.source_path)
-
+        scopes = gmail_settings["Scopes"]
         credentials = None
-        if "token" in json_gmail_settings:
-            credentials = Credentials.from_authorized_user_info(
-                json_gmail_settings["token"], self.SCOPES
-            )
+        if gmail_settings.get("Token"):
+            credentials = Credentials.from_authorized_user_info(gmail_settings["Token"], scopes)
 
         # Si les identifiants ne sont pas valides, relancer la procédure d'authentification
         if not credentials or not credentials.valid:
             if credentials and credentials.expired and credentials.refresh_token:
                 credentials.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_config(
-                    json_gmail_settings["credentials"], self.SCOPES
-                )
+                flow = InstalledAppFlow.from_client_config(gmail_settings["Credentials"], scopes)
                 credentials = flow.run_local_server(port=0)
 
             # Sauvegarde des identifiants mis à jour
-            json_gmail_settings["token"] = json.loads(credentials.to_json())
-            json_to_file(self.source_path, json_gmail_settings)
+            update_api_settings("Gmail", {"Token": json.loads(credentials.to_json())})
 
         try:
             self.logger.log("Call the Gmail API")
@@ -98,16 +97,15 @@ class CGmail(CMedia):
     def _build_dataframes(self)-> dict[str, pd.DataFrame]:
         """Construit les DataFrames résumant les labels et la liste des messages."""
         results = {}
-        for data_type, func in [("gmailLabel",self._list_labels), ("gmailMessage", self._list_messages)]:
-            results[data_type] = pd.DataFrame()
+        for data_type, label, func in [
+            ("gmailLabel", "labels", self._list_labels),
+            ("gmailMessage", "messages", self._list_messages),
+        ]:
             try:
-                results[data_type] = self.logger.log_elapsed_time(
-                    func, f"Build dataframe with {data_type[5:]}s"
-                )
+                results[data_type] = self.logger.log_elapsed_time(func, f"Build dataframe with {label}")
             except HttpError as error:
-                self.logger.log_error(f"An error occurred getting {data_type[5:]}s: {error}")
+                self.logger.log_error(f"An error occurred getting {label}: {error}")
                 results[data_type] = pd.DataFrame()
-
         return results
 
     def _list_labels(self)-> pd.DataFrame:
@@ -170,12 +168,10 @@ class CGmail(CMedia):
         )
 
         for key, df in self._build_dataframes_details(df_source).items():
-            csv_path = target_dir / f"{key}.csv"
-
-            def export_csv()-> None:
-                data_frame_to_csv(df, csv_path, self.data_separator)  # noqa: B023
-
-            self.logger.log_elapsed_time(export_csv, f"Display {key}")
+            self.logger.log_elapsed_time(
+                functools.partial(data_frame_to_csv, df, target_dir / f"{key}.csv", self.data_separator),
+                f"Display {key}",
+            )
 
     def _build_dataframes_details(
         self,
@@ -186,11 +182,18 @@ class CGmail(CMedia):
             return {"gmailMessageDetailsResult": pd.DataFrame()}
 
         message_details = []
-        unique_ids = set(df_source["id"].dropna())
+        unique_ids = sorted(set(df_source["id"].dropna()))
+        responses = self.logger.log_elapsed_time(
+            lambda: self._get_messages_batch(unique_ids),
+            f"Get details of {len(unique_ids)} message(s) by batches of {self.BATCH_SIZE}",
+        )
 
         for message_id in unique_ids:
+            response = responses.get(message_id)
+            if response is None:
+                continue  # erreur déjà journalisée par _get_messages_batch
             try:
-                message_details.append(self._get_message_details(message_id))
+                message_details.append(self._get_message_details(message_id, response))
             except Exception as e:  # noqa: BLE001
                 self.logger.log_error(
                     f"An error occurred with message Id {message_id} : {e}"
@@ -220,20 +223,34 @@ class CGmail(CMedia):
         )
         return {"gmailMessageDetailsResult": df_result}
 
-    def _get_message_details(
-        self,
-        message_id: str
-        )-> dict[str, typing.Any]:
-        """Récupère le détail complet d'un message donné via son identifiant."""
+    def _get_messages_batch(self, message_ids: list[str])-> dict[str, dict[str, typing.Any]]:
+        """Détail complet des messages, par requêtes groupées (BATCH_SIZE messages par appel HTTP
+        au lieu d'un appel par message). Un message en erreur est journalisé et absent du résultat."""
         if not self.gmail_api_service:
             return {}
 
-        request = self.gmail_api_service.users().messages().get(
-            userId=self.USER_ID, id=message_id, format="full"
-        )
-        response = self.logger.log_elapsed_time(
-            request.execute, f"Get message detail of Id {message_id}"
-        )
+        responses: dict[str, dict[str, typing.Any]] = {}
+
+        def on_response(request_id: str, response: dict[str, typing.Any], exception: Exception | None)-> None:
+            if exception is not None:
+                self.logger.log_error(f"An error occurred with message Id {request_id} : {exception}")
+            else:
+                responses[request_id] = response
+
+        messages = self.gmail_api_service.users().messages()
+        for start in range(0, len(message_ids), self.BATCH_SIZE):
+            batch = self.gmail_api_service.new_batch_http_request(callback=on_response)
+            for message_id in message_ids[start:start + self.BATCH_SIZE]:
+                batch.add(messages.get(userId=self.USER_ID, id=message_id, format="full"), request_id=message_id)
+            batch.execute()
+        return responses
+
+    def _get_message_details(
+        self,
+        message_id: str,
+        response: dict[str, typing.Any],
+        )-> dict[str, typing.Any]:
+        """En-têtes utiles et pièces jointes (téléchargées) d'un message déjà récupéré."""
         payload = response.get("payload", {})
 
         # Traitement des en-têtes HTTP/MIME
@@ -322,13 +339,13 @@ class CGmail(CMedia):
                 folder = (
                     target_root
                     / "Gmail_Attachment"
-                    / from_email
-                    / to_email
-                    / ext.replace(".", "")
+                    / (clean_last_directory_name(from_email) or "unknown")
+                    / (clean_last_directory_name(to_email) or "unknown")
+                    / (ext.lstrip(".") or "no_extension")
                 )
                 folder.mkdir(parents=True, exist_ok=True)
 
-                file_path = folder / clean_file_name(filename)
+                file_path = self._free_attachment_path(folder / clean_file_name(filename), file_data)
                 file_path.write_bytes(file_data)
 
                 abs_path_str = str(file_path.resolve())
@@ -338,3 +355,14 @@ class CGmail(CMedia):
                 saved_file_paths.append(abs_path_str)
 
         return saved_file_paths
+
+    @staticmethod
+    def _free_attachment_path(file_path: Path, data: bytes)-> Path:
+        """Chemin où enregistrer la pièce jointe : le même si le fichier n'existe pas ou est
+        identique, sinon nom_2, nom_3… (auparavant, deux pièces jointes homonymes de mails
+        différents s'écrasaient)."""
+        candidate, index = file_path, 1
+        while candidate.exists() and candidate.read_bytes() != data:
+            index += 1
+            candidate = file_path.with_name(f"{file_path.stem}_{index}{file_path.suffix}")
+        return candidate

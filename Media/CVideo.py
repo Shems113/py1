@@ -9,10 +9,9 @@ from Common.CWhisperModel import CWhisperModel
 from Common.EEnums import EActionType, EMediaType
 from Common.Helpers.Audio import (
     extract_mono_16khz_pcm_stream,
-    get_audio_id3_tags,
     get_audio_tags,
 )
-from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
+from Common.Helpers.Dataframe import data_frame_to_csv
 from Common.Helpers.File import get_file_common_fields
 from Common.Helpers.Media import (
     ensure_ffmpeg_available,
@@ -33,11 +32,13 @@ class CVideo(CMedia):
         self,
         json_path: str | Path,
         action_type: EActionType,
-        media_type: EMediaType = EMediaType.Video
+        media_type: EMediaType = EMediaType.Video,
+        whisper_workers: int = 1,
         )-> None:
         super().__init__(json_path, media_type, action_type)
+        # Modèle chargé seulement à la première transcription (CLazy)
         self.whisper_model = CWhisperModel(
-            logger=self.logger, model_size_or_path="large-v3"
+            logger=self.logger, model_size_or_path="large-v3", num_workers=whisper_workers
         )
         self.chunk_stream_size: int = 65536
 
@@ -99,8 +100,10 @@ class CVideo(CMedia):
                     if frame_errors:
                         result["frameErrors"] = [common_fields | frame_errors]
 
-                audio_tags = dict(get_audio_tags(path_obj))
-                result["videoOther"] = [common_fields | audio_tags]
+                # mutagen ne lit que certains conteneurs (MP4, M4V…) : rien pour un MKV
+                audio_tags = get_audio_tags(path_obj)
+                if audio_tags is not None:
+                    result["videoOther"] = [common_fields | dict(audio_tags)]
 
         except Exception as e:  # noqa: BLE001
             self.logger.log_error(
@@ -111,75 +114,7 @@ class CVideo(CMedia):
 
     def write(self)-> None:
         """Édite les métadonnées audio/vidéo à partir des données d'un CSV source."""
-        if not self.source_path:
-            return
-
-        df = data_frame_from_csv(self.source_path, self.data_separator)
-
-        if df.empty or "path" not in df.columns:
-            return
-
-        media_fields = [col for col in df.columns if col != "path"]
-        rows_to_drop = []
-
-        for row in df.itertuples():
-            file_path = row.path
-            fields_data = {
-                col: getattr(row, col)
-                for col in media_fields
-                if pd.notna(getattr(row, col))
-            }
-
-            def edit_task()-> bool:
-                return self._edit_audio_fields(file_path, fields_data)  # noqa: B023
-
-            log_msg = f"Edit {file_path} with fields {media_fields}"
-            if self.logger.log_elapsed_time(edit_task, log_msg):
-                rows_to_drop.append(row.Index)
-
-        if rows_to_drop:
-            df = df.drop(index=rows_to_drop)
-
-        data_frame_to_csv(
-            df,
-            self.source_path,
-            self.data_separator,
-            self.fieldsByCodec.get("video"),
-        )
-
-    def _edit_audio_fields(
-        self, file_path: str | Path, fields: dict[str, Any]
-    )-> bool:
-        """Met à jour les étiquettes (tags) d'un fichier média audio ou vidéo."""
-        path_obj = Path(file_path)
-        if not (is_audio(path_obj) or is_video(path_obj)):
-            return False
-
-        try:
-            fetch_tags_fn = (
-                get_audio_id3_tags if is_audio(path_obj) else get_audio_tags
-            )
-            audio = fetch_tags_fn(path_obj)
-
-            updates = {}
-            for key, value in fields.items():
-                current_val = audio.get(key, [None])[0]
-                str_val = str(value)
-                if str_val != current_val:
-                    updates[key] = str_val.split("@")
-
-            if updates:
-                audio.update(updates)
-                audio.save(path_obj)
-                self.logger.log(f"Update {path_obj} tags with {updates}")
-
-            return True
-
-        except Exception as e:  # noqa: BLE001
-            self.logger.log_error(
-                f"Error with {path_obj} : failed to edit tags ({e})"
-            )
-            return False
+        self._write_tags_from_csv("video")
 
     def transcribe(self)-> None:
         """Exécute la transcription audio et la synchronisation."""
@@ -190,18 +125,19 @@ class CVideo(CMedia):
                 df=df,
                 target=sys.stdout,
                 separator=self.data_separator,
-                fields=self.fieldsByCodec.get("audioTranscription"),
+                fields=self.fields_by_codec.get("audioTranscription"),
             )
         else:
             data_by_codec = self.process_files_parallel(self.transcribe_video_audio_file)
-            dfs = self.build_dataframes_by_codec(data_by_codec, log_message="Audio transcription map generated for " , skip_aggregation = True)
+            dfs = self.build_dataframes_by_codec(
+                data_by_codec, log_message="Audio transcription map generated for ", skip_aggregation=True)
             self.export_dataframes_to_csv_by_codec(dfs)
 
     def transcribe_video_audio_file(
         self,
         file_path: str | Path
     )-> dict[str, list[dict[str, Any]]]:
-        """Convertit un fichier média en flux PCM via CUtils et délègue la transcription à _transcribe_video_audio_stream."""
+        """Convertit un fichier média en flux PCM (helper Audio) et le transcrit."""
         path_obj = Path(file_path).resolve()
         if not (is_video(path_obj) or is_audio(path_obj)):
             return {}
@@ -280,8 +216,8 @@ class CVideo(CMedia):
                 "end": segment["end"],
                 "duration": segment["end"] - segment["start"],
                 "text": segment["text"],
-                "srt": self._get_data(True, i, segment),
-                "ffmpeg_cmd": self._get_data(False, i, segment),
+                "srt": self._segment_to_srt(i, segment),
+                "ffmpeg_cmd": self._segment_to_ffmpeg_cmd(i),
             }
             for i, segment in enumerate(segment_data)
         ]
@@ -335,36 +271,16 @@ class CVideo(CMedia):
 
         return True
 
-    def _get_data(
-        self,
-        is_srt: bool,
-        i: int,
-        seg: dict[str, Any]
-    )-> str:
-        self.logger.log(f"Get data of the segment {i} : {seg}")
+    @staticmethod
+    def _segment_to_srt(i: int, seg: dict[str, Any])-> str:
+        """Bloc SRT d'un segment transcrit (numéroté à partir de 1)."""
+        start, end = format_timestamp(seg["start"]), format_timestamp(seg["end"])
+        return f"{i + 1}\n{start} --> {end}\n{seg['text'].strip()}\n\n"
 
-        if is_srt:
-            start = format_timestamp(seg["start"])
-            end = format_timestamp(seg["end"])
-            text = seg["text"].strip()
-            return f"{i + 1}\n{start} --> {end}\n{text}\n\n"
-
-        ffmpeg_cmd : list[str] = [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            "@audio_start",
-            "-to",
-            "@audio_end",
-            "-i",
-            "@audio_path",
-            "-af",
-            "@atempo_or_anull",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            str(self.target_path / f"chunk_{i:04d}.m4a"),
-        ]
-
-        return " ".join(ffmpeg_cmd)
+    def _segment_to_ffmpeg_cmd(self, i: int)-> str:
+        """Modèle de commande ffmpeg d'extraction du segment (paramètres @... à remplacer)."""
+        output = self.target_path / f"chunk_{i:04d}.m4a" if self.target_path else f"chunk_{i:04d}.m4a"
+        return " ".join([
+            "ffmpeg", "-y", "-ss", "@audio_start", "-to", "@audio_end", "-i", "@audio_path",
+            "-af", "@atempo_or_anull", "-c:a", "aac", "-b:a", "192k", str(output),
+        ])

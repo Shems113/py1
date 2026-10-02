@@ -32,7 +32,7 @@ ACTION_MAPPING: dict[EActionType, str] = {
     EActionType.Write: "write",
     EActionType.Bookmark: "bookmark",
     EActionType.Transcribe: "transcribe",
-    EActionType.TranscribeAndCheck: "transcribeAndCheck",
+    EActionType.TranscribeAndCheck: "transcribe_and_check",
 }
 
 
@@ -41,9 +41,14 @@ def process(
     action_name: str
     )-> None:
     """Initialise les logs et exécute la méthode d'action sur l'instance de média."""
-    if hasattr(media, action_name) and callable(getattr(media, action_name)):
-        media.init_log()
-        getattr(media, action_name)()
+    action = getattr(media, action_name, None)
+    if not callable(action):
+        # Auparavant ignoré sans message (ex. Music + Bookmark)
+        media.logger.log_error(
+            f"Action '{media.action_type.name}' non prise en charge pour {media.media_type.name}.")
+        return
+    media.init_log()
+    action()
 
 
 def main()-> None:
@@ -63,6 +68,7 @@ def main()-> None:
         type=str,
         nargs="+",
         help="One or more media types",
+        choices=[m.name for m in EMediaType],
         default=[DEFAULT_MEDIA.name],
     )
     parser.add_argument(
@@ -70,14 +76,15 @@ def main()-> None:
         type=str,
         nargs="+",
         help="One or more action types",
+        choices=[a.name for a in EActionType],
         default=[DEFAULT_ACTION.name],
     )
     args = parser.parse_args()
 
     # Chaque action est appliquée à chaque média
     json_path = Path(args.jsonPath)
-    media_types = [getattr(EMediaType, name) for name in args.mediaType]
-    action_types = [getattr(EActionType, name) for name in args.actionType]
+    media_types = [EMediaType[name] for name in args.mediaType]
+    action_types = [EActionType[name] for name in args.actionType]
 
     for media_type in media_types:
         media_class = MEDIA_MAPPING[media_type]

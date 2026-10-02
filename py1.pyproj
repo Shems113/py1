@@ -69,10 +69,8 @@
     <Folder Include="Templates\" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Files\freebox_ca.pem" />
-    <Content Include="Files\freebox_token.json" />
+    <Content Include="Files\ExternalApiSettings.json" />
     <Content Include="PowerShell\cmd.ps1" />
-    <Content Include="Files\GmailApiSettings.json" />
     <Content Include="Files\LinuxSettings.json" />
     <Content Include="Files\WindowsSettings.json" />
     <Content Include="PowerShell\get_run_pod_info.ps1" />

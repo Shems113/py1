@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any
 
@@ -17,12 +18,18 @@ class CWhisperModel:
         logger: CLogger,
         model_size_or_path: str,
         device: str = "auto",
-        compute_type: str = "default"
+        compute_type: str = "default",
+        num_workers: int = 1,
         )-> None:
-        """Initialise le wrapper du modèle Whisper."""
+        """Initialise le wrapper du modèle Whisper.
+
+        num_workers : nombre de transcriptions exécutées réellement en parallèle quand
+        plusieurs threads appellent le même modèle. En CPU, les cœurs sont répartis entre
+        eux (sinon chaque transcription prend tous les cœurs et elles se gênent)."""
         self.model_size_or_path: str = model_size_or_path
         self.device: str = device
         self.compute_type: str = compute_type
+        self.num_workers: int = max(1, num_workers)
         self.logger = logger
         self.lazy_model: CLazy[WhisperModel | None] = CLazy(self._load_model)
 
@@ -44,10 +51,13 @@ class CWhisperModel:
         )
 
         try:
+            cpu_threads = max(1, (os.cpu_count() or 4) // self.num_workers) if self.device == "cpu" else 0
             return WhisperModel(
                 self.model_size_or_path,
                 device=self.device,
                 compute_type=self.compute_type,
+                num_workers=self.num_workers,
+                cpu_threads=cpu_threads,
             )
         except Exception as e:  # noqa: BLE001
             self.logger.log_error(f"Failed to load Whisper model: {e}")

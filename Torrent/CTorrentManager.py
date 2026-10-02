@@ -7,7 +7,10 @@ import pandas as pd
 from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
 from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
-from Common.Helpers.Torrent import select_best_quality_torrent
+from Common.Helpers.Torrent import (
+    select_best_quality_torrent,
+    select_torrents_to_download,
+)
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 from Torrent.CFreeboxDownloader import CFreeboxDownloader
 from Torrent.CScraperLimeTorrents import CScraperLimeTorrents
@@ -16,14 +19,16 @@ from Torrent.CScraperTorznab import CScraperTorznab
 from Torrent.CScraperYts import CScraperYts
 from Torrent.CTorrentDownloader import CTorrentDownloader
 
+DEFAULT_LOCAL_OUTPUT_DIR = r"C:\Users\SEDOUD\Videos\New\Torrent"
+
 
 class CTorrentManager:
     def __init__(
         self,
-        logsPath:Path|str
+        logs_path: Path | str
         )-> None:
         # Enregistrement dynamique de l'ensemble des scrapers
-        self.logger = Logger([str(logsPath)])
+        self.logger = Logger([str(logs_path)])
         self.scrapers: dict[TorrentSource, CCommonTorrent] = {
             TorrentSource.YTS: CScraperYts(self.logger),
             TorrentSource.LIMETORRENTS: CScraperLimeTorrents(self.logger),
@@ -128,9 +133,13 @@ class CTorrentManager:
         self,
         input_file: str | Path,
         output_file: str | Path,
-        max_workers: int = 4
+        max_workers: int = 2
         )-> bool:
-        """Traite une liste de films issue d'un fichier CSV en parallèle."""
+        """Traite une liste de films issue d'un fichier CSV en parallèle.
+
+        max_workers limité à 2 : chaque film interroge déjà 4 sources en parallèle, dont
+        certaines avec leurs propres threads (jusqu'à ~400 requêtes simultanées avec 4 films,
+        de quoi se faire bloquer par les sites)."""
         df_input = data_frame_from_csv(input_file, ";")
         if df_input.empty:
             return False
@@ -166,15 +175,15 @@ class CTorrentManager:
         input_file: str | Path,
         output_file: str | Path
         )-> bool:
-        return self._download_films_from_magnets(input_file,output_file,False)
-    
+        return self._download_films_from_magnets(input_file, output_file, False)
+
     def route_download_films_from_freebox(
         self,
         input_file: str | Path,
         output_file: str | Path
         )-> bool:
-        return self._download_films_from_magnets(input_file,output_file,True)    
-            
+        return self._download_films_from_magnets(input_file, output_file, True)
+
     def _download_films_from_magnets(
         self,
         input_file: str | Path,
@@ -190,34 +199,27 @@ class CTorrentManager:
             return False
 
         data_frame_to_csv(df_best, output_file, ";")
-        magnet_data = {}
-
-        # Filtrage des lignes valides
-        selected_rows = df_best[
-            df_best["selection_status"].isin(["#1_best", "#2_best_quality_lower_size"])
-        ]
-
-        for row in selected_rows.itertuples():
-            tmdb_id = getattr(row, "tmdb_id", None)
-            name = getattr(row, "name", None)
-            magnet_val = getattr(row, "magnet", None)
-
-            if not magnet_val or pd.isna(magnet_val):
-                continue
-
-            magnet_data[str(magnet_val)] = f"{str(tmdb_id) if pd.notna(tmdb_id) else '0'}_{name}"
+        magnet_data = {
+            str(row.magnet): f"{row.tmdb_id if pd.notna(row.tmdb_id) else '0'}_{row.name}"
+            for row in select_torrents_to_download(df_best).itertuples()
+        }
 
         if not magnet_data:
             self.logger.log("Aucun lien magnet valide trouvé dans la sélection.")
             return False
 
-        # Lancement du téléchargement
-        downloader = (CFreeboxDownloader if is_from_freebox else CTorrentDownloader) (
-            magnet_data=magnet_data,
-            output_dir=r"C:\Users\SEDOUD\Videos\New\Torrent"
-        )
-        
+        # Freebox : dossier de téléchargement par défaut de la box (disque dur / clé USB).
+        # Local : dossier Vidéos habituel.
+        # (Auparavant, le chemin Windows était aussi passé à la Freebox, qui ne le connaît pas.)
         try:
+            # Dans le try : la connexion à la Freebox peut échouer dès la création
+            downloader: CFreeboxDownloader | CTorrentDownloader = (
+                CFreeboxDownloader(magnet_data=magnet_data) if is_from_freebox
+                else CTorrentDownloader(
+                    magnet_data=magnet_data,
+                    output_dir=DEFAULT_LOCAL_OUTPUT_DIR,
+                )
+            )
             downloader.download_from_magnets()
         except KeyboardInterrupt:
             self.logger.log("\nTéléchargement interrompu par l'utilisateur.")

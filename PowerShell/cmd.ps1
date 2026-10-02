@@ -17,6 +17,7 @@ $isStreaming = $false
 
 # Active l'optimisation -OO pour Python via la variable d'environnement
 $env:PYTHONOPTIMIZE = 2
+$env:PYTHONUTF8 = 1
 	
 # --- Exécution ---
 if ($isStreaming) {
@@ -27,9 +28,11 @@ if ($isStreaming) {
     ffmpeg -nostdin -loglevel error -i $inputFile -map 0:v:0 -c copy -f matroska pipe:1 | uv run --python $globalEnv $pyPath @pythonCommonArgs > $outputFile
 	
 } else {
-	$pythonCommonArgs = @("--mediaType","Video","--actionType","Read")
+	# $pythonCommonArgs = @("--mediaType","File","--actionType","Read")
+	$pythonCommonArgs = @("--mediaType","Video","Subtitle","--actionType","Read")
 
     uv run --python $globalEnv $pyPath @pythonCommonArgs
+	# & "D:\Result\PowerShell\parallel_commands.ps1" "D:\Result\PowerShell\commands.txt"
 	# 2. Exécution de l'application vidéo seule (CVideoApp.py)
 	# uv run --python $globalEnv $pyVPath
 }
@@ -59,10 +62,9 @@ if ($isStreaming) {
 
 # Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned; & D:\Projets\Python\global-env\Scripts\Activate.ps1
 
+# Exemple : à partir de ton CSV (colonne "path")
 # $linkDir = "D:\Result\Music\Input"
 # New-Item -ItemType Directory -Force -Path $linkDir | Out-Null
-
-# Exemple : à partir de ton CSV (colonne "path")
 # Import-Csv -LiteralPath "D:\Result\Music\musicResult.csv" -Delimiter ';' | Where-Object { $_.path } | ForEach-Object {
     # $link = Join-Path $linkDir (Split-Path $_.path -Leaf)
     # if (-not (Test-Path -LiteralPath $link)) {

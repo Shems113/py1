@@ -1,22 +1,25 @@
-import os
 import urllib.parse
-import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from xml.etree import ElementTree
 
 import requests
 
 from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
+from Common.Helpers.ApiSettings import get_api_settings
 from Common.Helpers.HTML import parse_size
-from Common.Helpers.Torrent import parse_quality_torrent
+from Common.Helpers.Torrent import build_magnet, format_bytes, parse_quality_torrent
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
+
+
+def _local_tag(element: ElementTree.Element)-> str:
+    """Nom de balise sans espace de noms XML, en minuscules ({ns}attr -> attr)."""
+    return element.tag.rsplit("}", 1)[-1].lower()
 
 
 class CScraperTorznab(CCommonTorrent):
     """Scraper Torznab parallélisé pour Prowlarr."""
 
-    DEFAULT_API_URL = "http://127.0.0.1:9696"
-    DEFAULT_API_KEY = "f1d2663b9a944fdfaf211814b83ca131"
     INDEXER_IDS = {  # noqa: RUF012
         1: "The Pirate Bay",
         2: "YTS",
@@ -38,21 +41,12 @@ class CScraperTorznab(CCommonTorrent):
         cat: str = "2000,2010,2020,2030,2040,2045,2050,2060",
         max_workers: int = 10
         )-> None:
-        raw_url = (
-            api_url
-            or os.getenv("PROWLARR_API_URL")
-            or os.getenv("TORZNAB_API_URL")
-            or self.DEFAULT_API_URL
-        )
+        # URL et clé de ton Prowlarr : section « Prowlarr » de Files/ExternalApiSettings.json
+        settings = get_api_settings("Prowlarr")
+        raw_url = api_url or settings["ApiUrl"]
         parsed = urllib.parse.urlparse(raw_url)
         self.api_url = f"{parsed.scheme}://{parsed.netloc}" if parsed.netloc else raw_url.rstrip("/")
-
-        self.api_key = (
-            api_key
-            or os.getenv("PROWLARR_API_KEY")
-            or os.getenv("TORZNAB_API_KEY")
-            or self.DEFAULT_API_KEY
-        )
+        self.api_key = api_key or settings.get("ApiKey", "")
 
         self.cat = cat
         self.max_workers = max_workers
@@ -86,7 +80,7 @@ class CScraperTorznab(CCommonTorrent):
             if not content.startswith(b"<?xml") and not content.startswith(b"<rss"):
                 return []
 
-            root = ET.fromstring(content)
+            root = ElementTree.fromstring(content)  # flux XML de ton Prowlarr local
             channel = root.find("channel")
             if channel is None:
                 return []
@@ -130,7 +124,7 @@ class CScraperTorznab(CCommonTorrent):
 
                 # 2. Balayage des attributs torznab/jackett
                 for child in item:
-                    tag_name = child.tag.split("}")[-1].lower() if "}" in child.tag else child.tag.lower()
+                    tag_name = _local_tag(child)
 
                     if tag_name == "attr":
                         attr_name = child.attrib.get("name", "").lower()
@@ -158,12 +152,7 @@ class CScraperTorznab(CCommonTorrent):
                 # 3. Formattage de la taille
                 size_str = "N/A"
                 if size_bytes > 0:
-                    gb = size_bytes / (1024 ** 3)
-                    if gb >= 1:
-                        size_str = f"{gb:.2f} GB"
-                    else:
-                        mb = size_bytes / (1024 ** 2)
-                        size_str = f"{mb:.2f} MB"
+                    size_str = format_bytes(size_bytes)
                 elif raw_size_text:
                     # Ajout du préfixe "Size: " pour être accepté par parse_size
                     parsed = parse_size(f"Size: {raw_size_text}")
@@ -173,19 +162,19 @@ class CScraperTorznab(CCommonTorrent):
                     if parsed != "N/A":
                         size_str = parsed
 
-                # 4. Fallbacks Magnet
+                # 4. Magnet reconstruit depuis l'Info Hash, sinon lien du fichier .torrent fourni
+                #    par Prowlarr (accepté par la Freebox et Bitport). Plus jamais la page web
+                #    de détail, qui n'est pas téléchargeable.
                 if magnet == "N/A":
                     if infohash:
-                        magnet = f"magnet:?xt=urn:btih:{infohash}&dn={urllib.parse.quote(title)}"
+                        magnet = build_magnet(infohash, title, self.trackers)
                     elif enclosure_url:
                         magnet = enclosure_url
-                    elif detail_url != "N/A":
-                        magnet = detail_url
 
                 # Nom du tracker d'origine
                 origin_indexer = f"Indexer-{indexer_id}"
                 for child in item:
-                    tag_name = child.tag.split("}")[-1].lower() if "}" in child.tag else child.tag.lower()
+                    tag_name = _local_tag(child)
                     if tag_name in ("prowlarrindexer", "jackettindexer") and child.text:
                         origin_indexer = child.text
                         break

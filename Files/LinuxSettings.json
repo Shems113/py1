@@ -2,10 +2,12 @@
   "File": [
     {
       "Action": "Read",
-      "RootSourcePath": "/workspace/",
-      "LogRootSourcePath": "/workspace/logs/",
-      "ExtraFileRootSourcePath": "/workspace/file/",
-      "RootTargetPath": "/workspace/file/result/",
+      "Paths": {
+        "RootSourcePath": "/workspace/",
+        "LogRootSourcePath": "/workspace/logs/",
+        "ExtraFileRootSourcePath": "/workspace/file/",
+        "RootTargetPath": "/workspace/file/result/"
+      },
       "FilePatterns": [
         "*.jpg",
         "*.jpg",
@@ -38,9 +40,11 @@
   "Video": [
     {
       "Action": "Read",
-      "RootSourcePath": "/workspace/video/",
-      "LogRootSourcePath": "/workspace/logs/",
-      "RootTargetPath": "/workspace/video/result/",
+      "Paths": {
+        "RootSourcePath": "/workspace/video/",
+        "LogRootSourcePath": "/workspace/logs/",
+        "RootTargetPath": "/workspace/video/result/"
+      },
       "FilePatterns": [
         "*.mkv",
         "*.m4v",
@@ -77,36 +81,44 @@
     },
     {
       "Action": "Transcribe",
-      "RootSourcePath": "/workspace/video/",
-      "LogRootSourcePath": "/workspace/logs/",
-      "ExtraFileRootSourcePath": "/workspace/video/audioMapping.csv",
-      "RootTargetPath": "/workspace/video/result/",
+      "Paths": {
+        "RootSourcePath": "/workspace/video/",
+        "LogRootSourcePath": "/workspace/logs/",
+        "ExtraFileRootSourcePath": "/workspace/video/audioMapping.csv",
+        "RootTargetPath": "/workspace/video/result/"
+      },
       "FilePatterns": [
         "*.mp4"
       ]
     },
     {
       "Action": "Write",
-      "RootSourcePath": "/workspace/video/result/videoInput.csv",
-      "LogRootSourcePath": "/workspace/logs/"
+      "Paths": {
+        "RootSourcePath": "/workspace/video/result/videoInput.csv",
+        "LogRootSourcePath": "/workspace/logs/"
+      }
     }
   ],
   "Subtitle": [
     {
       "Action": "Read",
-      "RootSourcePath": "/workspace/video/",
-      "LogRootSourcePath": "/workspace/logs/",
-      "RootTargetPath": "/workspace/subtitle/result/",
+      "Paths": {
+        "RootSourcePath": "/workspace/video/",
+        "LogRootSourcePath": "/workspace/logs/",
+        "RootTargetPath": "/workspace/subtitle/result/"
+      },
       "FilePatterns": [
         "*.srt"
       ]
     },
     {
       "Action": "Transcribe",
-      "RootSourcePath": "/workspace/video/",
-      "LogRootSourcePath": "/workspace/logs/",
-      "ExtraFileRootSourcePath": "/workspace/subtitle/result/",
-      "RootTargetPath": "/workspace/subtitle/",
+      "Paths": {
+        "RootSourcePath": "/workspace/video/",
+        "LogRootSourcePath": "/workspace/logs/",
+        "ExtraFileRootSourcePath": "/workspace/subtitle/result/",
+        "RootTargetPath": "/workspace/subtitle/"
+      },
       "FilePatterns": [
         "*.mp4",
         "*.mp3"
@@ -114,10 +126,12 @@
     },
     {
       "Action": "TranscribeAndCheck",
-      "RootSourcePath": "/workspace/video/",
-      "LogRootSourcePath": "/workspace/logs/",
-      "ExtraFileRootSourcePath": "/workspace/subtitle/subtitleMapping.csv",
-      "RootTargetPath": "/workspace/subtitle/",
+      "Paths": {
+        "RootSourcePath": "/workspace/video/",
+        "LogRootSourcePath": "/workspace/logs/",
+        "ExtraFileRootSourcePath": "/workspace/subtitle/subtitleMapping.csv",
+        "RootTargetPath": "/workspace/subtitle/"
+      },
       "FilePatterns": [
         "*.mp4"
       ]
@@ -126,19 +140,21 @@
   "Gmail": [
     {
       "Action": "Read",
-      "RootSourcePath": "/workspace/git_project_python/Files/GmailApiSettings.json",
-      "LogRootSourcePath": "/workspace/logs/",
-      "RootTargetPath": "/workspace/gmail/result/",
+      "Paths": {
+        "LogRootSourcePath": "/workspace/logs/",
+        "RootTargetPath": "/workspace/gmail/result/"
+      },
       "FilePatterns": [
         "in:anywhere AND has:attachment AND filename:pdf"
       ]
     },
     {
       "Action": "Write",
-      "RootSourcePath": "/workspace/git_project_python/Files/GmailApiSettings.json",
-      "ExtraFileRootSourcePath": "/workspace/gmail/result/gmailMessageResult.csv",
-      "LogRootSourcePath": "/workspace/logs/",
-      "RootTargetPath": "/workspace/gmail/result/"
+      "Paths": {
+        "LogRootSourcePath": "/workspace/logs/",
+        "ExtraFileRootSourcePath": "/workspace/gmail/result/gmailMessageResult.csv",
+        "RootTargetPath": "/workspace/gmail/result/"
+      }
     }
   ]
 }

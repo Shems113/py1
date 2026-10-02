@@ -3,9 +3,10 @@ from datetime import datetime
 
 from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
+from Common.Helpers.ApiSettings import get_api_settings
 from Common.Helpers.HTML import parse_int
 from Common.Helpers.System import get_mirrors_from_env
-from Common.Helpers.Torrent import parse_quality_torrent
+from Common.Helpers.Torrent import build_magnet, format_bytes, parse_quality_torrent
 from Common.Helpers.Web import clean_query
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 
@@ -15,10 +16,10 @@ class CScraperThePirateBay(CCommonTorrent):
         self,
         logger:Logger
         )-> None:
-        mirrors = get_mirrors_from_env(
-            "THEPIRATEBAY_MIRRORS",
-            ["https://apibay.org"],
-        )
+        # Miroirs : Files/ExternalApiSettings.json, sauf si THEPIRATEBAY_MIRRORS est définie
+        settings = get_api_settings("Torrent")["ThePirateBay"]
+        mirrors = get_mirrors_from_env("THEPIRATEBAY_MIRRORS", settings["Mirrors"])
+        self.detail_url: str = settings["DetailUrl"]
         super().__init__(mirrors,logger=logger)
 
     @property
@@ -26,12 +27,18 @@ class CScraperThePirateBay(CCommonTorrent):
         return TorrentSource.THEPIRATEBAY.value
 
     def search(self, query: str)-> list[TorrentResult]:
+        # Miroirs essayés dans l'ordre (THEPIRATEBAY_MIRRORS) : l'URL était auparavant
+        # écrite en dur, la variable d'environnement n'avait aucun effet
         encoded = urllib.parse.quote(clean_query(query))
-        url = f"https://apibay.org/q.php?q={encoded}"
-        trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in self.trackers)
+        for mirror in self.mirrors:
+            results = self._search_mirror(f"{mirror.rstrip('/')}/q.php?q={encoded}")
+            if results:
+                return results
+        return []
 
+    def _search_mirror(self, url: str)-> list[TorrentResult]:
         try:
-            res = self.session.get(url, doh_url=self.DOH_URL, timeout=8)
+            res = self.session.get(url, doh_url=self.doh_url, timeout=8)
             if res.status_code != 200:
                 return []
 
@@ -49,11 +56,8 @@ class CScraperThePirateBay(CCommonTorrent):
                 if not infohash:
                     continue
 
-                magnet = f"magnet:?xt=urn:btih:{infohash}&dn={urllib.parse.quote(title)}{trackers_str}"
-
-                # Fix Size : conversion des octets bruts (int) vers un format lisible
-                raw_size = parse_int(item.get("size", 0)) or 0
-                formatted_size = self._format_bytes(raw_size) if raw_size > 0 else "N/A"
+                magnet = build_magnet(infohash, title, self.trackers)
+                formatted_size = format_bytes(parse_int(item.get("size", 0)))
 
                 # Fix Date : conversion du Timestamp UNIX (int) vers YYYY-MM-DD
                 raw_added = parse_int(item.get("added", 0))
@@ -67,24 +71,15 @@ class CScraperThePirateBay(CCommonTorrent):
                         source=self.source_name,
                         title=title,
                         quality=parse_quality_torrent(title),
-                        seeds=parse_int(item.get("seeders", 0)) or 0,
-                        leechs=parse_int(item.get("leechers", 0)) or 0,
+                        seeds=parse_int(item.get("seeders", 0)),
+                        leechs=parse_int(item.get("leechers", 0)),
                         size=formatted_size,
                         date=formatted_date,
                         magnet=magnet,
-                        detail_url=f"https://thepiratebay.org/description.php?id={item.get('id')}",
+                        detail_url=f"{self.detail_url}{item.get('id')}",
                     )
                 )
             return results
         except Exception as e:  # noqa: BLE001
-            self.logger.log_error(f"Erreur API TPB: {e}")
+            self.logger.log_error(f"Erreur API TPB ({url.split('?')[0]}): {e}")
             return []
-
-    @staticmethod
-    def _format_bytes(size_in_bytes: int)-> str:
-        """Convertit une taille en octets vers MB, GB, TB, etc."""
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if abs(size_in_bytes) < 1024.0:
-                return f"{size_in_bytes:.2f} {unit}"
-            size_in_bytes /= 1024.0
-        return f"{size_in_bytes:.2f} PB"

@@ -2,8 +2,10 @@ import urllib.parse
 
 from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
+from Common.Helpers.ApiSettings import get_api_settings
 from Common.Helpers.HTML import parse_int
 from Common.Helpers.System import get_mirrors_from_env
+from Common.Helpers.Torrent import build_magnet
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 
 
@@ -12,21 +14,10 @@ class CScraperYts(CCommonTorrent):
         self,
         logger:Logger
         )-> None:
-        mirrors = get_mirrors_from_env(
-            "YTS_ENDPOINTS",
-            [
-                "https://yts.mx/api/v2/list_movies.json",
-                "https://yts.lt/api/v2/list_movies.json",
-                "https://yts.do/api/v2/list_movies.json",
-                "https://yts.ibit.to/api/v2/list_movies.json",
-            ],
-        )
-        trackers = [
-            "udp://open.demonii.com:1337/announce",
-            "udp://tracker.openbittorrent.com:80",
-            "udp://tracker.coppersurfer.tk:6969",
-        ]
-        super().__init__(mirrors, logger, trackers)
+        # Endpoints et trackers : Files/ExternalApiSettings.json, sauf si YTS_ENDPOINTS est définie
+        settings = get_api_settings("Torrent")["Yts"]
+        mirrors = get_mirrors_from_env("YTS_ENDPOINTS", settings["Endpoints"])
+        super().__init__(mirrors, logger, settings["Trackers"])
 
     @property
     def source_name(self)-> str:
@@ -34,19 +25,23 @@ class CScraperYts(CCommonTorrent):
 
     def search(self, query: str)-> list[TorrentResult]:
         encoded = urllib.parse.quote(query.strip())
-        trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in self.trackers)
 
         for endpoint in self.mirrors:
             url = f"{endpoint}?query_term={encoded}&sort_by=seeds&limit=20"
             try:
-                res = self.session.get(url, doh_url=self.DOH_URL, timeout=8)
+                res = self.session.get(url, doh_url=self.doh_url, timeout=8)
                 if res.status_code != 200:
+                    self.logger.log_error(f"Erreur API YTS {endpoint}: HTTP {res.status_code}")
                     continue
 
                 data = res.json()
-                movies = data.get("data", {}).get("movies")
-                if data.get("status") != "ok" or not movies:
+                if data.get("status") != "ok":
+                    self.logger.log_error(f"Erreur API YTS {endpoint}: {data.get('status_message', data.get('status'))}")
                     continue
+                movies = data.get("data", {}).get("movies")
+                if not movies:
+                    # Réponse valide sans résultat : inutile d'interroger les autres endpoints
+                    return []
 
                 results = []
                 for movie in movies:
@@ -57,7 +52,9 @@ class CScraperYts(CCommonTorrent):
                         quality_val = str(t.get("quality", "N/A"))
                         torrent_type = str(t.get("type", "")).lower()
                         hash_code = t.get("hash")
-                        magnet = f"magnet:?xt=urn:btih:{hash_code}&dn={urllib.parse.quote(title_long)}{trackers_str}"
+                        if not hash_code:
+                            continue
+                        magnet = build_magnet(hash_code, title_long, self.trackers)
 
                         results.append(
                             TorrentResult(

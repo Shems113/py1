@@ -4,7 +4,6 @@ from pathlib import Path
 import pandas as pd
 import pysrt
 
-from Common.CWhisperModel import CWhisperModel
 from Common.EEnums import EActionType, EMediaType
 from Common.Helpers.Dataframe import data_frame_from_csv
 from Common.Helpers.Other import time_to_seconds
@@ -20,10 +19,11 @@ class CSubtitle(CMedia):
         action_type: EActionType
         )-> None:
         super().__init__(json_path, EMediaType.Subtitle, action_type)
-        self.video = CVideo(self.json_path, self.action_type, EMediaType.Subtitle)
-        self.whisper_model = CWhisperModel(logger=self.logger, model_size_or_path="large-v3")
         is_transcribe_action = action_type in [EActionType.Transcribe, EActionType.TranscribeAndCheck]
         self.max_worker = (4 if IS_WINDOWS and is_transcribe_action else 1)
+        # Un seul modèle Whisper, partagé avec CVideo et dimensionné pour max_worker threads
+        self.video = CVideo(self.json_path, self.action_type, EMediaType.Subtitle, whisper_workers=self.max_worker)
+        self.whisper_model = self.video.whisper_model
         self.mapping_video_srt_files: dict[Path, list[Path]] = {}
         self.tolerance_seconds = 0.2
 
@@ -37,14 +37,14 @@ class CSubtitle(CMedia):
             self.video.transcribe()
         else:
             data = self.process_files_parallel(self._transcribe_video_audio_file_in_subtitle)
-            dfs = self.build_dataframes_by_codec(data, log_message="Transcribed ", skip_aggregation = True)
-            self.export_dataframes_to_csv_by_codec(dfs, isOtherSource=True)
+            dfs = self.build_dataframes_by_codec(data, log_message="Transcribed ", skip_aggregation=True)
+            self.export_dataframes_to_csv_by_codec(dfs, is_other_source=True)
 
-    def transcribeAndCheck(self)-> None:
+    def transcribe_and_check(self)-> None:
         """Runs parallel transcription and checks synchronization of generated .srt files against existing ones."""
         self.mapping_video_srt_files = self.get_mapping_video_srt_files()
         data = self.process_files_parallel(self._check_cross_lingual_synchronization)
-        dfs = self.build_dataframes_by_codec(data, log_message="Checked ", skip_aggregation = True)
+        dfs = self.build_dataframes_by_codec(data, log_message="Checked ", skip_aggregation=True)
         self.export_dataframes_to_csv_by_codec(dfs)
 
     def get_mapping_video_srt_files(self)-> dict[Path, list[Path]]:
@@ -71,8 +71,13 @@ class CSubtitle(CMedia):
                 self.logger.log(f"Subtitle file already exists: {srt_obj_path.name}. Skipping transcription.")
                 return result
 
-            with open(srt_obj_path, "w", encoding="utf-8") as f:
-                f.writelines(segment["srt"] for segment in self.video.transcribe_video_audio_file(path_obj).get("audioTranscription",[]))
+            segments = self.video.transcribe_video_audio_file(path_obj).get("audioTranscription", [])
+            if not segments:
+                # Pas de .srt vide : il ferait croire aux lancements suivants que le fichier est traité
+                self.logger.log_error(f"Transcription vide ou en échec : {path_obj.name}. Aucun .srt écrit.")
+                return result
+
+            srt_obj_path.write_text("".join(segment["srt"] for segment in segments), encoding="utf-8")
 
             result = {"subtitleMapping": [{"file_path": str(path_obj), "srt_path": str(srt_obj_path)}]}
             self.logger.log(f"Transcription successful: {path_obj.name} -> Saved to {srt_obj_path.name}")
@@ -92,19 +97,18 @@ class CSubtitle(CMedia):
         """
         file_path_obj = Path(file_path).resolve()
         srt_path_objs = self.mapping_video_srt_files.get(file_path_obj, [])
-        segmentData: list[dict[str, typing.Any]] = []
         result: dict[str, list[dict[str, typing.Any]]] = {}
 
         if not any(srt_path_objs):
             self.logger.log_error(f"No corresponding SRT file found for {file_path_obj.name}. Skipping synchronization check.")
             return result
 
-        segmentData = self.logger.log_elapsed_time(
+        segment_data = self.logger.log_elapsed_time(
             lambda: self.whisper_model.get_file_transcription_data(file_path_obj, voice_activity_detection_filter=True),
             f"Processing {file_path_obj.name} to extract VAD speech intervals..."
         )
 
-        speech_intervals = [{"start": seg["start"], "end": seg["end"]} for seg in segmentData if seg["text"].strip()]
+        speech_intervals = [{"start": seg["start"], "end": seg["end"]} for seg in segment_data if seg["text"].strip()]
 
         if not speech_intervals:
             self.logger.log_error(f"No speech detected in {file_path_obj.name}.")

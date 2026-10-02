@@ -6,6 +6,7 @@ select = [
     "F",               # pyflakes : noms non définis, imports inutilisés...
     "I",               # tri des imports
     "B",               # bugbear : pièges classiques (closures dans une boucle...)
+    "N",               # pep8-naming : snake_case pour fonctions, arguments et variables
 ]
 
 [lint.isort]

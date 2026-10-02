@@ -6,9 +6,10 @@ from bs4 import BeautifulSoup
 
 from Common.CLogger import CLogger as Logger
 from Common.EEnums import ETorrentSource as TorrentSource
+from Common.Helpers.ApiSettings import get_api_settings
 from Common.Helpers.HTML import parse_int
 from Common.Helpers.System import get_mirrors_from_env
-from Common.Helpers.Torrent import parse_quality_torrent
+from Common.Helpers.Torrent import build_magnet, parse_quality_torrent
 from Common.Helpers.Web import build_absolute_url, clean_query
 from Torrent.CCommonTorrent import CCommonTorrent, TorrentResult
 
@@ -18,14 +19,9 @@ class CScraperLimeTorrents(CCommonTorrent):
         self,
         logger:Logger
         )-> None:
-        mirrors = get_mirrors_from_env(
-            "LIMETORRENTS_MIRRORS",
-            [
-                "https://www.limetorrents.lol",
-                "https://www.limetorrents.asia",
-                "https://www.limetorrents.co",
-            ],
-        )
+        # Miroirs : Files/ExternalApiSettings.json, sauf si LIMETORRENTS_MIRRORS est définie
+        settings = get_api_settings("Torrent")["LimeTorrents"]
+        mirrors = get_mirrors_from_env("LIMETORRENTS_MIRRORS", settings["Mirrors"])
         super().__init__(mirrors,logger=logger)
 
     @property
@@ -63,9 +59,7 @@ class CScraperLimeTorrents(CCommonTorrent):
                     if magnet_url == "N/A":
                         hash_match = re.search(r"\b([a-fA-F0-9]{40})\b", str(row) + " " + detail_link)
                         if hash_match:
-                            infohash = hash_match.group(1)
-                            trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in self.trackers)
-                            magnet_url = f"magnet:?xt=urn:btih:{infohash}&dn={urllib.parse.quote(title_text)}{trackers_str}"
+                            magnet_url = build_magnet(hash_match.group(1), title_text, self.trackers)
 
                     # Extraction sécurisée des seeds / leechs (tds[.td-seed] et tds[.td-leech] si présents, sinon index)
                     seed_elem = row.select_one("td.tdnormal:nth-of-type(4), td.green, td.tdseed")
@@ -74,8 +68,6 @@ class CScraperLimeTorrents(CCommonTorrent):
                     seeds_raw = seed_elem.text if seed_elem else tds[-2].text
                     leechs_raw = leech_elem.text if leech_elem else tds[-1].text
 
-                    s_parsed = parse_int(seeds_raw.replace(",", "").strip())
-                    l_parsed = parse_int(leechs_raw.replace(",", "").strip())
 
                     # Extraction propre de la date et taille
                     date_raw = tds[1].text.split("-")[0].strip() if len(tds) > 1 and tds[1].text else "N/A"
@@ -85,8 +77,8 @@ class CScraperLimeTorrents(CCommonTorrent):
                         "source": self.source_name,
                         "title": title_text,
                         "quality": parse_quality_torrent(title_text),
-                        "seeds": s_parsed if s_parsed is not None else 0,
-                        "leechs": l_parsed if l_parsed is not None else 0,
+                        "seeds": parse_int(seeds_raw),
+                        "leechs": parse_int(leechs_raw),
                         "size": size_raw,
                         "date": date_raw,
                         "magnet": magnet_url,

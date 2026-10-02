@@ -7,7 +7,8 @@ from typing import Any
 
 from Common.Helpers.File import clean_directory_name
 from Common.Helpers.Video import get_video_extensions
-from MediaService.CFreebox import call, connect, http
+from MediaService.CFreebox import call, connect, get_default_download_dir, http
+from Torrent.CBaseDownloader import CBaseDownloader, ProgressSnapshot
 
 CHUNK_SIZE = 1024 * 1024  # 1 Mo
 
@@ -20,18 +21,21 @@ def _b64(path: str)-> str:
     return base64.b64encode(path.encode("utf-8")).decode("ascii")
 
 
-class CFreeboxDownloader:
+class CFreeboxDownloader(CBaseDownloader):
     """Téléchargement parallèle de liens magnet par la Freebox (API Freebox OS)."""
 
     def __init__(
         self,
         magnet_data: dict[str, str | int] | None = None,
-        output_dir: str = "/Freebox/Téléchargements"
+        output_dir: str | None = None
         )-> None:
+        """output_dir : dossier SUR LA BOX (chemin Freebox, pas un chemin Windows).
+        Par défaut, le dossier de téléchargement configuré dans Freebox OS (disque dur /
+        clé USB) ; un sous-dossier par film y est créé."""
         self.magnet_data = magnet_data or {}
-        self.base_save_path = output_dir.rstrip("/")
         self.video_extensions = get_video_extensions()
         self.base_url, self.session_token = connect()
+        self.base_save_path = (output_dir or get_default_download_dir(self.base_url, self.session_token)).rstrip("/")
 
     def _api(self, method: str, path: str, **kwargs: Any)-> Any:
         return call(method, f"{self.base_url}{path}", self.session_token, **kwargs)
@@ -195,46 +199,31 @@ class CFreeboxDownloader:
         filtered: set[int] = set()
         print("\n--- Téléchargement en cours ---\n")
 
-        sys.stdout.write("\033[?25l")  # Masquer le curseur
-        sys.stdout.flush()
+        def poll()-> ProgressSnapshot:
+            downloads.clear()
+            downloads.update(self._fetch_downloads())
+            all_done = True
+            status_lines = []
+            total_dl = total_ul = 0
 
-        try:
-            while True:
-                downloads = self._fetch_downloads()
-                all_done = True
-                status_lines = []
-                total_dl, total_ul = 0, 0
+            for i, (task_id, movie_id) in enumerate(tasks.items(), start=1):
+                task = downloads.get(task_id, {})
+                total_dl += task.get("rx_rate", 0)
+                total_ul += task.get("tx_rate", 0)
 
-                for i, (task_id, movie_id) in enumerate(tasks.items(), start=1):
-                    task = downloads.get(task_id, {})
-                    total_dl += task.get("rx_rate", 0)
-                    total_ul += task.get("tx_rate", 0)
+                if task and task["status"] not in FINISHED_STATUSES:
+                    all_done = False
 
-                    if task and task["status"] not in FINISHED_STATUSES:
-                        all_done = False
+                # Métadonnées reçues (taille connue) : on filtre une seule fois
+                if task.get("size") and task_id not in filtered:
+                    self._apply_video_filter(task_id)
+                    filtered.add(task_id)
 
-                    # Métadonnées reçues (taille connue) : on filtre une seule fois
-                    if task.get("size") and task_id not in filtered:
-                        self._apply_video_filter(task_id)
-                        filtered.add(task_id)
+                status_lines.append(self._format_status(i, movie_id, task))
 
-                    status_lines.append(self._format_status(i, movie_id, task))
+            return status_lines, total_dl, total_ul, all_done
 
-                # Affichage console synthétique
-                sys.stdout.write(f"\rTotal DL: {total_dl / 1048576:.2f} Mo/s | Total UL: {total_ul / 1048576:.2f} Mo/s\033[K\n")
-                for line in status_lines:
-                    sys.stdout.write(f"  {line}\033[K\n")
-                sys.stdout.flush()
-
-                if all_done:
-                    break
-
-                time.sleep(1)
-                sys.stdout.write(f"\033[{len(status_lines) + 1}F")  # Remonter le curseur
-
-        finally:
-            sys.stdout.write("\033[?25h")  # Réafficher le curseur
-            sys.stdout.flush()
+        self._run_progress_loop(poll)
 
         print(f"\nTéléchargements terminés dans : {self.base_save_path}")
 
@@ -250,10 +239,8 @@ if __name__ == "__main__":
         url: "SAINT SEIYA",
     }
 
-    OUTPUT_FOLDER = "/Freebox/Téléchargements/Torrent"
-
     try:
-        # CFreeboxDownloader(magnet_data=MAGNET_DATA, output_dir=OUTPUT_FOLDER).download_from_magnets()
+        # CFreeboxDownloader(magnet_data=MAGNET_DATA).download_from_magnets()  # dossier par défaut de la box
         CFreeboxDownloader().print_downloads()
     except KeyboardInterrupt:
         print("\nSuivi interrompu : les téléchargements continuent sur la Freebox.")

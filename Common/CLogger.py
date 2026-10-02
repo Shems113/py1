@@ -45,11 +45,8 @@ class CLogger:
 
     def log_file_progress(self, index: int, total: int, file_path: str)-> None:
         """Affiche la progression du traitement des fichiers avec pourcentage."""
-        try:
-            percent = (index / total) * 100 if total else 0
-            self.log(f"Processed {index}/{total} ({percent:.1f}%) : {file_path}")
-        except Exception:  # noqa: BLE001
-            self.log(f"Processed {index}/{total} : {file_path}")
+        percent = (index / total) * 100 if total else 0
+        self.log(f"Processed {index}/{total} ({percent:.1f}%) : {file_path}")
 
     def log_elapsed_time(self, func: Callable[[], Any], func_name: str)-> Any:
         """Mesure et log le temps d'exécution d'une fonction."""
@@ -57,9 +54,9 @@ class CLogger:
         self.log(sep)
         self.log(f"Init : {func_name}")
 
-        start_time = time.time()
+        start_time = time.perf_counter()  # horloge monotone : insensible aux changements d'heure
         result = func()
-        elapsed_time = time.time() - start_time
+        elapsed_time = time.perf_counter() - start_time
 
         self.log(f"Time spent in {func_name} : {elapsed_time:.2f} seconds")
         self.log(sep)

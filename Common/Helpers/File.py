@@ -2,6 +2,7 @@ import hashlib
 import os
 import re
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -14,32 +15,40 @@ WORD_FORMAT_EXTENSIONS = {
 
 HASH_ALGOS = ["md5"]
 
+# Caractères interdits dans un nom Windows, y compris les caractères de contrôle
+_INVALID_NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_HASH_CHUNK_SIZE = 1024 * 1024  # 1 Mio : ~10x plus rapide que 8 Kio sur de gros fichiers
+
+
 def clean_directory_name(dir_name: str)-> str:
-    return re.sub(r'[<>:"/\\|?*]', " ", dir_name).strip()
+    return _INVALID_NAME_CHARS.sub(" ", dir_name).strip()
 
 def clean_last_directory_name(dir_name: str)-> str:
-    result = clean_directory_name(dir_name).strip()
-    while result.endswith("."):
-        result = result[:-1]
-    return result
+    # Windows refuse un nom de dossier terminé par un point OU un espace
+    return clean_directory_name(dir_name).rstrip(". ")
 
 def clean_file_name(file_name: str)-> str:
-    return re.sub(r'[<>:"/\\|?*]', "_", file_name).strip()
+    # Windows refuse un nom de fichier terminé par un point ou un espace
+    return _INVALID_NAME_CHARS.sub("_", file_name).strip().rstrip(".").rstrip()
 
 def remove_empty_folders(path_directory: str | Path)-> None:
-    """Parcourt et supprime récursivement les dossiers vides."""
+    """Supprime récursivement les dossiers vides, y compris ceux qui ne contenaient
+    que des sous-dossiers vides (le dossier racine est supprimé s'il devient vide)."""
     path_obj = Path(path_directory)
-    if not path_obj.exists():
+    if not path_obj.is_dir():
         return
 
-    for root, dirs, files in os.walk(path_obj, topdown=False):
-        if not (any(dirs) or any(files)):
-            for f in files:
-                os.remove(os.path.join(root, f))
-            try:
-                os.rmdir(root)
-            except OSError:
-                pass
+    # topdown=False : les enfants sont traités avant leur parent. La liste « dirs »
+    # fournie par os.walk date d'avant la suppression des enfants : on re-vérifie
+    # donc le contenu réel du dossier au moment de le traiter.
+    for root, _dirs, _files in os.walk(path_obj, topdown=False):
+        try:
+            with os.scandir(root) as it:
+                if next(it, None) is not None:
+                    continue
+            os.rmdir(root)
+        except OSError:
+            pass
 
 def get_folder_name(file_path: str | Path)-> str:
     return str(Path(file_path).parent)
@@ -73,11 +82,22 @@ def compute_file_hash(
     algorithm: str = "sha256"
 )-> str:
     """Calcule le hash d'un fichier."""
-    hasher = hashlib.new(algorithm)
     with open(file_path, "rb") as f:
-        while chunk := f.read(8192):
-            hasher.update(chunk)
-    return hasher.hexdigest()
+        return hashlib.file_digest(f, algorithm).hexdigest()
+
+def compute_file_hashes(
+    file_path: str | Path,
+    algorithms: Iterable[str],
+)-> dict[str, str]:
+    """Calcule plusieurs hashes en UNE seule lecture du fichier."""
+    hashers = {algo: hashlib.new(algo) for algo in algorithms}
+    if not hashers:
+        return {}
+    with open(file_path, "rb") as f:
+        while chunk := f.read(_HASH_CHUNK_SIZE):
+            for hasher in hashers.values():
+                hasher.update(chunk)
+    return {algo: hasher.hexdigest() for algo, hasher in hashers.items()}
 
 def get_file_common_fields(
     file_path: str | Path,
@@ -96,15 +116,20 @@ def get_file_common_fields(
     }
 
     if include_all_data:
+        hashes = compute_file_hashes(path_obj, HASH_ALGOS)
         result.update(
             {
                 "folder": path_obj.parent.name,
                 "name": path_obj.stem,
-                **{
-                    f"hash{algo.upper()}": compute_file_hash(path_obj, algo)
-                    for algo in HASH_ALGOS
-                },
+                **{f"hash{algo.upper()}": digest for algo, digest in hashes.items()},
             }
         )
 
     return {"path": str(path_obj)} | result
+
+def resolve_project_path(raw_path: str | Path | None)-> Path:
+    """Chemin absolu tel quel ; chemin relatif (ou vide) résolu depuis la racine du projet."""
+    if not raw_path:
+        return PROJECT_ROOT
+    path_obj = Path(raw_path)
+    return path_obj if path_obj.is_absolute() else PROJECT_ROOT / path_obj

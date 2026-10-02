@@ -1,22 +1,23 @@
 """Client minimal de l'API Freebox OS.
 
 Usage :
-    python freebox_api.py register           # 1 fois, DEPUIS CHEZ TOI : enregistre l'application
-    python freebox_api.py status             # état de la connexion Internet
-    python freebox_api.py info               # modèle, firmware, uptime
-    python freebox_api.py reboot             # redémarre la Freebox (droit "Modification des réglages")
-    python freebox_api.py download "magnet:?xt=..."            # la Freebox télécharge le magnet
-    python freebox_api.py download "magnet:?xt=..." --dir "/Freebox/Films"
-    python freebox_api.py progress 12                          # avancement de la tâche 12
-    python freebox_api.py status --local     # force l'accès local (http://mafreebox.freebox.fr)
+    python -m MediaService.CFreebox register           # 1 fois, DEPUIS CHEZ TOI : enregistre l'application
+    python -m MediaService.CFreebox status             # état de la connexion Internet
+    python -m MediaService.CFreebox info               # modèle, firmware, uptime
+    python -m MediaService.CFreebox reboot             # redémarre la Freebox (droit "Modification des réglages")
+    python -m MediaService.CFreebox download "magnet:?xt=..."            # la Freebox télécharge le magnet
+    python -m MediaService.CFreebox download "magnet:?xt=..." --dir "/Freebox/Films"
+    python -m MediaService.CFreebox progress 12                          # avancement de la tâche 12
+    python -m MediaService.CFreebox status --local     # force l'accès local (http://mafreebox.freebox.fr)
 
 Depuis un autre script :
     from MediaService.CFreebox import add_magnet
     task_id = add_magnet("magnet:?xt=urn:btih:...")
 
-Fichiers dans FILES_DIR (py1\\Files par défaut) :
-- freebox_ca.pem     : autorités racines Freebox, nécessaire pour l'accès HTTPS à distance
-- freebox_token.json : créé par `register` ; il vaut un mot de passe, ne le commite jamais
+Paramètres : section « Freebox » de Files/ExternalApiSettings.json
+- LocalUrl, AppId, AppName, AppVersion : identité de l'application
+- CaCertificate : autorités racines Freebox (PEM, une ligne par élément), nécessaire pour l'accès HTTPS à distance
+- Token : écrit par `register` ; il vaut un mot de passe, ce fichier ne doit jamais être commité
 """
 
 import argparse
@@ -24,7 +25,6 @@ import base64
 import functools
 import hashlib
 import hmac
-import json
 import ssl
 import sys
 import time
@@ -33,19 +33,19 @@ from typing import Any
 import requests
 from requests.adapters import HTTPAdapter
 
-from Common.Helpers.File import PROJECT_ROOT
+from Common.Helpers.ApiSettings import get_api_settings, update_api_settings
 from Common.Helpers.System import CURRENT_MACHINE
 
-APP_ID = "fr.sedoud.freebox-client"
-APP_NAME = "Freebox client Python"
-APP_VERSION = "1.0"
-LOCAL_URL = "http://mafreebox.freebox.fr"
-# Dossier des fichiers de configuration (ici py1\Files, à adapter si besoin)
-FILES_DIR = PROJECT_ROOT / "Files"
-TOKEN_FILE = FILES_DIR / "freebox_token.json"
-# Autorités racines Freebox (le certificat HTTPS de la box n'est pas signé par une CA publique)
-CA_FILE = FILES_DIR / "freebox_ca.pem"
+SETTINGS_SECTION = "Freebox"
 TIMEOUT = 10
+
+
+def _settings()-> dict[str, Any]:
+    return get_api_settings(SETTINGS_SECTION)
+
+
+def _local_url()-> str:
+    return _settings()["LocalUrl"]
 
 
 class FreeboxTLSAdapter(HTTPAdapter):
@@ -56,9 +56,11 @@ class FreeboxTLSAdapter(HTTPAdapter):
     """
 
     def init_poolmanager(self, *args: Any, **kwargs: Any)-> None:
-        if not CA_FILE.is_file():
-            raise FileNotFoundError(f"Certificats Freebox introuvables : {CA_FILE}")
-        ctx = ssl.create_default_context(cafile=str(CA_FILE))
+        # Autorités racines Freebox (le certificat HTTPS de la box n'est pas signé par une CA publique)
+        ca_lines = _settings().get("CaCertificate") or []
+        if not ca_lines:
+            raise FileNotFoundError("Certificats Freebox absents (Freebox > CaCertificate dans ExternalApiSettings.json)")
+        ctx = ssl.create_default_context(cadata="\n".join(ca_lines) + "\n")
         ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
         kwargs["ssl_context"] = ctx
         super().init_poolmanager(*args, **kwargs)
@@ -75,7 +77,7 @@ def _session(secure: bool)-> requests.Session:
 def http(url: str)-> requests.Session:
     """Session adaptée à l'URL, créée au premier appel (et non à l'import du module).
 
-    Le certificat Freebox (freebox_ca.pem) n'est chargé que pour les URL https.
+    Le certificat Freebox (CaCertificate) n'est chargé que pour les URL https.
     """
     return _session(url.startswith("https://"))
 
@@ -115,16 +117,18 @@ def find_api_major(base_url: str, announced: int)-> str:
 
 def register()-> None:
     """Demande l'autorisation à la Freebox et sauvegarde le jeton d'application."""
-    info = http(LOCAL_URL).get(f"{LOCAL_URL}/api_version", timeout=TIMEOUT).json()
+    settings = _settings()
+    local_url = settings["LocalUrl"]
+    info = http(local_url).get(f"{local_url}/api_version", timeout=TIMEOUT).json()
     announced = int(info["api_version"].split(".")[0])
-    major = find_api_major(f"{LOCAL_URL}{info['api_base_url']}", announced)
+    major = find_api_major(f"{local_url}{info['api_base_url']}", announced)
     print(f"ℹ️  API annoncée : v{announced} — version utilisée : v{major}")
-    local_api = f"{LOCAL_URL}{info['api_base_url']}v{major}"
+    local_api = f"{local_url}{info['api_base_url']}v{major}"
 
     result = call("POST", f"{local_api}/login/authorize/", json={
-        "app_id": APP_ID,
-        "app_name": APP_NAME,
-        "app_version": APP_VERSION,
+        "app_id": settings["AppId"],
+        "app_name": settings["AppName"],
+        "app_version": settings["AppVersion"],
         "device_name": CURRENT_MACHINE,
     })
     app_token, track_id = result["app_token"], result["track_id"]
@@ -137,16 +141,16 @@ def register()-> None:
         time.sleep(2)
 
     if status != "granted":
-        sys.exit(f"❌ Autorisation refusée ou expirée (statut : {status})")
+        raise FreeboxError(f"Autorisation refusée ou expirée (statut : {status})")
 
-    TOKEN_FILE.write_text(json.dumps({
-        "app_token": app_token,
-        "api_domain": info["api_domain"],
-        "https_port": info["https_port"],
-        "api_base_url": info["api_base_url"],
-        "api_major": major,
-    }, indent=2), encoding="utf-8")
-    print(f"✅ Application autorisée. Jeton enregistré dans {TOKEN_FILE.name}")
+    update_api_settings(SETTINGS_SECTION, {"Token": {
+        "AppToken": app_token,
+        "ApiDomain": info["api_domain"],
+        "HttpsPort": info["https_port"],
+        "ApiBaseUrl": info["api_base_url"],
+        "ApiMajor": major,
+    }})
+    print("✅ Application autorisée. Jeton enregistré dans ExternalApiSettings.json (Freebox > Token)")
     print("   Pense à cocher ses droits : Freebox OS > Paramètres > Gestion des accès > Applications")
 
 
@@ -154,22 +158,28 @@ def register()-> None:
 # Session (local ou à distance)
 # --------------------------------------------------------------------------- #
 def load_config()-> dict[str, Any]:
-    if not TOKEN_FILE.is_file():
-        sys.exit("❌ Aucun jeton : lance d'abord `python freebox_api.py register` depuis chez toi.")
-    return json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
+    """Jeton d'application enregistré par `register` (Freebox > Token).
+
+    Lève FreeboxError (et non sys.exit) : appelée depuis l'application Flask, une
+    sortie du programme arrêterait tout le serveur."""
+    token = _settings().get("Token") or {}
+    if not token.get("AppToken"):
+        raise FreeboxError(
+            "Aucun jeton : lance d'abord `python -m MediaService.CFreebox register` depuis chez toi.")
+    return token
 
 
 def api_url(config: dict[str, Any], local: bool)-> str:
-    """URL de base de l'API : HTTP en local, HTTPS (certificat Freebox, vérifié via freebox_ca.pem) à distance."""
-    root = LOCAL_URL if local else f"https://{config['api_domain']}:{config['https_port']}"
-    return f"{root}{config['api_base_url']}v{config['api_major']}"
+    """URL de base de l'API : HTTP en local, HTTPS (certificat Freebox, vérifié via CaCertificate) à distance."""
+    root = _local_url() if local else f"https://{config['ApiDomain']}:{config['HttpsPort']}"
+    return f"{root}{config['ApiBaseUrl']}v{config['ApiMajor']}"
 
 
 def open_session(config: dict[str, Any], base: str)-> str:
     """Ouvre une session : password = HMAC-SHA1(app_token, challenge)."""
     challenge = call("GET", f"{base}/login/")["challenge"]
-    password = hmac.new(config["app_token"].encode(), challenge.encode(), hashlib.sha1).hexdigest()
-    result = call("POST", f"{base}/login/session/", json={"app_id": APP_ID, "password": password})
+    password = hmac.new(config["AppToken"].encode(), challenge.encode(), hashlib.sha1).hexdigest()
+    result = call("POST", f"{base}/login/session/", json={"app_id": _settings()["AppId"], "password": password})
     return result["session_token"]
 
 
@@ -199,6 +209,13 @@ def add_magnet(magnet: str, download_dir: str | None = None, local: bool = False
         form["download_dir"] = base64.b64encode(download_dir.encode("utf-8")).decode("ascii")
     # Cet endpoint attend un formulaire (application/x-www-form-urlencoded), pas du JSON
     return call("POST", f"{base}/downloads/add", token, data=form)["id"]
+
+
+def get_default_download_dir(base: str, session_token: str)-> str:
+    """Dossier de téléchargement par défaut de la box (disque dur ou clé USB configuré
+    dans Freebox OS), décodé du base64 : ex. « /Disque dur/Téléchargements »."""
+    config = call("GET", f"{base}/downloads/config/", session_token)
+    return base64.b64decode(config["download_dir"]).decode("utf-8")
 
 
 def get_download(task_id: int, local: bool = False)-> dict[str, Any]:

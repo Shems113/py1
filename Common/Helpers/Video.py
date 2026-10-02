@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 import av
-import ffmpeg
-import numpy as np  # Importation propre et officielle du package ffmpeg-python
+import ffmpeg  # package ffmpeg-python
+import numpy as np
 from av.codec.hwaccel import HWAccel
 
 from Common.Helpers.System import IS_LINUX, IS_MY_GPU_MACHINE
@@ -55,14 +55,27 @@ def _open_container(source: str | BinaryIO)-> Any:
                 source.seek(0)  # flux déjà entamé : on le rembobine avant de réessayer en CPU
     return av.open(source)
 
+# Extensions vidéo toujours reconnues, même si mimetypes (registre Windows) les ignore
+_KNOWN_VIDEO_EXTENSIONS = frozenset({
+    ".mkv", ".mp4", ".m4v", ".mov", ".avi", ".wmv", ".webm", ".flv", ".ts",
+    ".m2ts", ".mts", ".vob", ".mpg", ".mpeg", ".ogv", ".3gp",
+})
+
+@functools.cache
+def _video_extensions()-> frozenset[str]:
+    # mimetypes.init() n'est appelé que s'il ne l'a jamais été : le rappeler relit le
+    # registre (lent) et efface les types ajoutés ailleurs par mimetypes.add_type()
+    if not mimetypes.inited:
+        mimetypes.init()
+    from_mimetypes = {ext.lower() for ext, mime in mimetypes.types_map.items()
+                      if mime.startswith("video/")}
+    # .ts est souvent déclaré en TypeScript : on le garde quand même comme vidéo
+    return frozenset(from_mimetypes | _KNOWN_VIDEO_EXTENSIONS)
+
 def get_video_extensions()-> set[str]:
-    """Retourne l'ensemble de toutes les extensions de fichiers vidéo référencées par mimetypes."""
-    mimetypes.init()
-    return {
-        ext.lower()
-        for ext, mime in mimetypes.types_map.items()
-        if mime.startswith("video/")
-    }
+    """Retourne l'ensemble de toutes les extensions de fichiers vidéo référencées par mimetypes
+    (calculé une seule fois ; une copie est renvoyée, modifiable sans effet de bord)."""
+    return set(_video_extensions())
 
 def get_video_streams_and_chapters(
     input_source: str | Path | BinaryIO
@@ -75,17 +88,23 @@ def get_video_streams_and_chapters(
         if isinstance(input_source, (str, Path)):
             probe_data = ffmpeg.probe(str(input_source), show_chapters=None)
         else:
-            # Si input_source est un flux streaming (pipe SSH / bytes), on le passe sur stdin via subprocess
-            input_bytes = input_source.read() if hasattr(input_source, 'read') else input_source
+            # Flux streaming (pipe SSH, fichier ouvert) ou bytes : passé à ffprobe sur stdin
             cmd = [
-                'ffprobe', '-show_format', '-show_streams', '-show_chapters',
-                '-print_format', 'json', '-i', 'pipe:0'
+                "ffprobe", "-v", "error", "-show_format", "-show_streams", "-show_chapters",
+                "-print_format", "json", "-i", "pipe:0",
             ]
-            process = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            out, _ = process.communicate(input=input_bytes)
-            probe_data = json.loads(out.decode('utf-8'))
+            if hasattr(input_source, "fileno"):
+                # Vrai descripteur : ffprobe ne lit que ce dont il a besoin, au lieu de
+                # charger tout le flux (potentiellement plusieurs Go) en mémoire
+                try:
+                    input_source.fileno()
+                    proc = subprocess.run(cmd, stdin=input_source, capture_output=True, timeout=300, check=False)
+                except (OSError, ValueError, AttributeError):
+                    proc = subprocess.run(cmd, input=input_source.read(), capture_output=True, timeout=300, check=False)
+            else:
+                data = input_source.read() if hasattr(input_source, "read") else input_source
+                proc = subprocess.run(cmd, input=data, capture_output=True, timeout=300, check=False)
+            probe_data = json.loads(proc.stdout.decode("utf-8", errors="replace") or "{}")
 
         streams = probe_data.get("streams", [])
         chapters = probe_data.get("chapters", [])
@@ -104,14 +123,14 @@ def get_video_corrupted_frames_info(
     total_frames = 0
     corrupted_frames = 0
     first_error = None
- 
+
     try:
         source = str(input_source) if isinstance(input_source, (str, Path)) else input_source
         with _open_container(source) as container:
             stream = container.streams.video[0]
             stream.thread_type = "AUTO"
             hw_decoding = stream.codec_context.is_hwaccel
- 
+
             # Parcours paquet par paquet pour continuer le scan même après une erreur
             for packet in container.demux(stream):
                 try:
@@ -121,7 +140,7 @@ def get_video_corrupted_frames_info(
                     corrupted_frames += 1
                     if not first_error:
                         first_error = str(e)
- 
+
     except Exception as e:  # noqa: BLE001
         return {
             "total_frames": 0,
@@ -131,11 +150,11 @@ def get_video_corrupted_frames_info(
             "hw_device": _hw_device(),
             "hw_decoding": None
         }
- 
+
     # Calcul du ratio
     processed_total = total_frames + corrupted_frames
     ratio = (corrupted_frames / processed_total) if processed_total > 0 else 0.0
- 
+
     return {
         "total_frames": processed_total,
         "error": first_error,
@@ -155,11 +174,13 @@ def _stream_duration_sec(stream: Any, container: Any)-> float | None:
 
 
 def _to_float_samples(frame: Any)-> np.ndarray:
-    """Convertit une frame audio en échantillons float normalisés dans [-1, 1]."""
+    """Convertit une frame audio en échantillons float normalisés dans [-1, 1].
+    float32 : deux fois moins de mémoire et plus rapide que float64, précision
+    largement suffisante pour des niveaux en dB (les sommes restent en float64)."""
     samples = frame.to_ndarray()
     if np.issubdtype(samples.dtype, np.integer):
-        return samples.astype(np.float64) / float(np.iinfo(samples.dtype).max)
-    return samples.astype(np.float64, copy=False)
+        return samples.astype(np.float32) * np.float32(1.0 / np.iinfo(samples.dtype).max)
+    return samples.astype(np.float32, copy=False)
 
 
 def _to_db(value: float)-> float:
@@ -232,9 +253,9 @@ def get_video_quality_indicators(
                         if frame.pts is not None and frame.sample_rate:
                             end = float(frame.pts * frame.time_base) + frame.samples / frame.sample_rate
                             audio_end_sec = end if audio_end_sec is None else max(audio_end_sec, end)
-                        samples = _to_float_samples(frame)
+                        samples = _to_float_samples(frame).ravel()
                         if samples.size:
-                            audio_sum_squares += float(np.sum(samples * samples))
+                            audio_sum_squares += float(np.dot(samples, samples))  # sans tableau temporaire
                             audio_sample_count += samples.size
                             audio_peak = max(audio_peak, float(np.max(np.abs(samples))))
 

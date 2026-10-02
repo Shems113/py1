@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# --- py1 : URL, clés, jetons et certificats des API externes (ne jamais commiter) ---
+Files/ExternalApiSettings.json
+/Files/ExternalApiSettings.example.json

@@ -7,8 +7,18 @@ MY_GPU_MACHINE = "TX16PRO"
 IS_WINDOWS = sys.platform == "win32"
 IS_LINUX = sys.platform == "linux"
 IS_MY_GPU_MACHINE = IS_WINDOWS and CURRENT_MACHINE.upper() == MY_GPU_MACHINE
-# CPU_COUNT = os.cpu_count()
-CPU_COUNT = 7
+
+
+def _cpu_count()-> int:
+    """Nombre de workers : variable PY1_CPU_COUNT si définie, sinon 7 (valeur historique).
+    Permet d'ajuster par machine (ex. serveur vast.ai) sans modifier le code."""
+    try:
+        value = int(os.getenv("PY1_CPU_COUNT", "0"))
+    except ValueError:
+        value = 0
+    return value if value > 0 else 7
+
+CPU_COUNT = _cpu_count()
 
 def check_required_env_vars(
     service_name: str,
@@ -38,4 +48,4 @@ def get_mirrors_from_env(
         mirrors = [m.strip() for m in override.split(",") if m.strip()]
         if mirrors:
             return mirrors
-    return defaults
+    return list(defaults)  # copie : l'appelant peut la modifier sans altérer la constante

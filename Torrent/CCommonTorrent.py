@@ -1,5 +1,5 @@
 import re
-import urllib.parse
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 from curl_cffi import requests
 
 from Common.CLogger import CLogger as Logger
+from Common.Helpers.ApiSettings import get_api_settings
+from Common.Helpers.Torrent import build_magnet
 
 
 @dataclass
@@ -30,7 +32,6 @@ class CCommonTorrent(ABC):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
     }
-    DOH_URL = "https://1.1.1.1/dns-query"
 
     def __init__(
         self,
@@ -39,22 +40,22 @@ class CCommonTorrent(ABC):
         trackers: list[str] | None = None
         )-> None:
         self.mirrors = mirrors
-        # Liste consolidée de trackers publics haute disponibilité
-        self.trackers = trackers or [
-            "udp://tracker.opentrackr.org:1337/announce",
-            "udp://open.demonii.com:1337/announce",
-            "udp://tracker.openbittorrent.com:80",
-            "udp://tracker.coppersurfer.tk:6969",
-            "udp://glotorrents.pw:6969/announce",
-            "udp://open.stealth.si:80/announce",
-            "udp://tracker.torrent.eu.org:451/announce",
-            "udp://tracker.moeking.me:6969/announce",
-            "udp://explodie.org:6969/announce",
-            "udp://ipv4.tracker.harry.lu:80/announce",
-            "https://tracker.tamersrealm.com:443/announce",
-        ]
-        self.session = requests.Session(impersonate="chrome120")
+        # Trackers publics et résolveur DNS-over-HTTPS : section « Torrent » de
+        # Files/ExternalApiSettings.json
+        settings = get_api_settings("Torrent")
+        self.trackers = trackers or settings["Trackers"]
+        self.doh_url: str = settings["DnsOverHttpsUrl"]
         self.logger = logger
+        self._thread_local = threading.local()
+
+    @property
+    def session(self)-> requests.Session:
+        """Session curl_cffi propre à chaque thread : une session curl n'est pas prévue pour
+        être utilisée par plusieurs threads à la fois (LimeTorrents en lance jusqu'à 10)."""
+        session = getattr(self._thread_local, "session", None)
+        if session is None:
+            session = self._thread_local.session = requests.Session(impersonate="chrome120")
+        return session
 
     @property
     @abstractmethod
@@ -72,7 +73,7 @@ class CCommonTorrent(ABC):
             res = self.session.get(
                 url,
                 headers=req_headers,
-                doh_url=self.DOH_URL,
+                doh_url=self.doh_url,
                 timeout=timeout,
             )
             if res.status_code == 200:
@@ -111,9 +112,7 @@ class CCommonTorrent(ABC):
 
         match = re.search(r'\b([a-fA-F0-9]{40})\b', str(soup))
         if match:
-            infohash = match.group(1)
-            trackers_str = "".join(f"&tr={urllib.parse.quote(t)}" for t in self.trackers)
-            return f"magnet:?xt=urn:btih:{infohash}{trackers_str}"
+            return build_magnet(match.group(1), trackers=self.trackers)
 
         return "N/A"
 
@@ -123,7 +122,7 @@ class CCommonTorrent(ABC):
         for mirror in self.mirrors:
             try:
                 res = self.session.get(
-                    mirror, headers=self.DEFAULT_HEADERS, doh_url=self.DOH_URL, timeout=timeout
+                    mirror, headers=self.DEFAULT_HEADERS, doh_url=self.doh_url, timeout=timeout
                 )
                 mirrors_status.append({"url": mirror, "ok": res.status_code == 200, "status": res.status_code})
             except Exception as e:  # noqa: BLE001

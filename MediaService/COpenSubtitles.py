@@ -1,4 +1,3 @@
-import os
 import time
 from pathlib import Path
 
@@ -6,10 +5,10 @@ import pandas as pd
 from opensubtitlescom import OpenSubtitles
 
 from Common.CLogger import CLogger as Logger
+from Common.Helpers.ApiSettings import get_api_settings
 from Common.Helpers.Dataframe import data_frame_from_csv, data_frame_to_csv
 from Common.Helpers.File import get_file_name_without_extension, get_folder_name
 from Common.Helpers.Media import move_media_file
-from Common.Helpers.System import check_required_env_vars
 
 
 class COpenSubtitles:
@@ -17,17 +16,11 @@ class COpenSubtitles:
         self,
         logger:Logger
         )-> None:
-        check_required_env_vars(
-            "OpenSubtitles",
-            ["OPENSUBTITLES_USER", "OPENSUBTITLES_PASS", "OPENSUBTITLES_API_KEY"],
-        )
-        opensubtitles_api_key='WJMkwcyNtcL7tnbgK9sdClOXdoxME0cX'
-        opensubtitles_user='Shems113'
-        opensubtitles_password='TyWk3pMDkR!&8hc'
-        # Sécurisation : retrait des identifiants et clés API gravés en dur
-        self.opensubtitles_user = os.getenv("OPENSUBTITLES_USER", opensubtitles_user)
-        self.opensubtitles_pass = os.getenv("OPENSUBTITLES_PASS", opensubtitles_password)
-        self.opensubtitles_api_key = os.getenv("OPENSUBTITLES_API_KEY", opensubtitles_api_key)
+        # Identifiants : section « OpenSubtitles » de Files/ExternalApiSettings.json
+        settings = get_api_settings("OpenSubtitles")
+        self.opensubtitles_user = settings.get("User", "")
+        self.opensubtitles_pass = settings.get("Password", "")
+        self.opensubtitles_api_key = settings.get("ApiKey", "")
         self.logger = logger
         self.user_agent = f"{self.opensubtitles_user or 'MediaApp'} v1.0"
         self.opensubtitles_client = None
@@ -39,7 +32,7 @@ class COpenSubtitles:
             return True
 
         if not all([self.opensubtitles_user, self.opensubtitles_pass, self.opensubtitles_api_key]):
-            self.logger.log_error("Erreur : Identifiants ou clé API OpenSubtitles manquants dans les variables d'environnement.")
+            self.logger.log_error("Erreur : identifiants ou clé API OpenSubtitles manquants dans ExternalApiSettings.json.")
             return False
 
         try:
@@ -105,15 +98,15 @@ class COpenSubtitles:
             dir_name = get_folder_name(path)
             file_name = get_file_name_without_extension(path)
 
-            # Formatage de nommage conforme (ex: film.fr.srt, film.fr2.srt, etc.)
+            # film.fr.other.srt, puis film.fr.other_2.srt, film.fr.other_3.srt...
             def name_func(i: int, _: str)-> str:
-                return os.path.join(dir_name,f"{file_name}.fr.other_{f'{i+1}' if i > 0 else ''}.srt")
+                suffix = f"_{i + 1}" if i > 0 else ""
+                return str(Path(dir_name) / f"{file_name}.fr.other{suffix}.srt")
 
-            def check_func(f: str | Path)-> bool:
-                return not os.path.isfile(f)
+            def is_same_subtitle(_: str | Path)-> bool:
+                return False  # un fichier existant n'est jamais écrasé : on prend le nom suivant
 
-            moved_files = move_media_file(temp_path, dir_name, name_func, check_func)
-            sub_path = moved_files[0] if moved_files else "N/A"
+            sub_path, _moved = move_media_file(temp_path, dir_name, name_func, is_same_subtitle)
 
             self.logger.log(f"Sous-titre enregistré : {sub_path}")
             return pd.DataFrame([{"subtitlePath": sub_path}])
@@ -125,10 +118,10 @@ class COpenSubtitles:
     # --- Routes Flask ---
 
     def route_get_films_subtitles(
-        self, inputFile: str | Path, outputFile: str | Path
+        self, input_file: str | Path, output_file: str | Path
     )-> bool:
         """Parcourt le CSV d'entrée, cherche les sous-titres pour chaque film et exporte les résultats."""
-        df_input = data_frame_from_csv(inputFile, ";")
+        df_input = data_frame_from_csv(input_file, ";")
         if df_input.empty:
             return False
 
@@ -151,17 +144,17 @@ class COpenSubtitles:
 
         if results:
             final_df = pd.concat(results, ignore_index=True)
-            data_frame_to_csv(final_df, outputFile, ";")
+            data_frame_to_csv(final_df, output_file, ";")
             return True
 
         self.logger.log("Aucun sous-titre trouvé pour l'ensemble des films du CSV.")
         return False
 
     def route_download_films_subtitles(
-        self, inputFile: str | Path, outputFile: str | Path
+        self, input_file: str | Path, output_file: str | Path
     )-> bool:
         """Parcourt le CSV d'entrée et télécharge les sous-titres sélectionnés."""
-        df_input = data_frame_from_csv(inputFile, ";")
+        df_input = data_frame_from_csv(input_file, ";")
         if df_input.empty:
             return False
 
@@ -180,7 +173,7 @@ class COpenSubtitles:
 
         if results:
             final_df = pd.concat(results, ignore_index=True)
-            data_frame_to_csv(final_df, outputFile, ";")
+            data_frame_to_csv(final_df, output_file, ";")
             return True
 
         return False
